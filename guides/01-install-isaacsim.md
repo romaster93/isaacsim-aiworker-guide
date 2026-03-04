@@ -42,12 +42,45 @@ isaacsim
 ```
 
 ### ROS2 연동 실행 (센서 데이터 발행 등)
+
+**방법 1: 수동 환경변수 설정 (매번 실행 시)**
 ```bash
 conda activate isaac_sim
 unset LD_PRELOAD
 export ROS_DISTRO=jazzy
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 export LD_LIBRARY_PATH="/home/cho/.local/share/ov/data/Kit/Isaac-Sim Full/5.1/exts/3/isaacsim.ros2.bridge-4.12.4+107.3.3.lx64/jazzy/lib"
+isaacsim
+```
+
+**방법 2: conda 자동 환경변수 설정 (권장, 1회만 설정)**
+
+매번 환경변수를 수동 설정하는 대신, conda activate/deactivate 시 자동으로 설정되도록 스크립트를 추가합니다:
+
+```bash
+# activate 스크립트 생성
+mkdir -p $CONDA_PREFIX/etc/conda/activate.d
+cat > $CONDA_PREFIX/etc/conda/activate.d/isaacsim_env.sh << 'EOF'
+#!/bin/bash
+unset LD_PRELOAD
+export ROS_DISTRO=jazzy
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export LD_LIBRARY_PATH="/home/cho/.local/share/ov/data/Kit/Isaac-Sim Full/5.1/exts/3/isaacsim.ros2.bridge-4.12.4+107.3.3.lx64/jazzy/lib"
+EOF
+
+# deactivate 스크립트 생성
+mkdir -p $CONDA_PREFIX/etc/conda/deactivate.d
+cat > $CONDA_PREFIX/etc/conda/deactivate.d/isaacsim_env.sh << 'EOF'
+#!/bin/bash
+unset ROS_DISTRO
+unset RMW_IMPLEMENTATION
+unset LD_LIBRARY_PATH
+EOF
+```
+
+설정 후에는 아래 명령어만으로 ROS2 연동 실행 가능:
+```bash
+conda activate isaac_sim
 isaacsim
 ```
 

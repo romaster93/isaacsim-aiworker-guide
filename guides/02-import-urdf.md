@@ -23,7 +23,15 @@ ls -la /home/cho/ms_AIworker/isaacsim_ai_worker/usd_ai_worker/ffw_sg2_follower.u
 > **참고**: URDF는 `package://ffw_description/meshes/...` 경로로 메시를 참조합니다.
 > 우리가 사용하는 파일에는 메시가 같은 디렉토리 구조에 포함되어 있습니다.
 
-### Step 2.2: IsaacSim에서 URDF 임포트
+### Step 2.2: 새 Stage 생성
+
+URDF 임포트 전에 빈 Stage를 생성합니다:
+1. `File` → `New from Stage Template` → **Default Stage**
+2. 기존 Stage가 열려있으면 "Would you like to save?" → **Don't Save**
+
+> **5.1.0 주의**: `File → New Stage`가 아닌 **`New from Stage Template → Default Stage`**를 사용합니다.
+
+### Step 2.3: IsaacSim에서 URDF 임포트
 
 1. **IsaacSim이 실행된 상태에서:**
    - 메뉴: `File` → `Import`
@@ -53,7 +61,7 @@ ls -la /home/cho/ms_AIworker/isaacsim_ai_worker/usd_ai_worker/ffw_sg2_follower.u
 
 3. **Import 클릭**
 
-### Step 2.3: Ground Plane 추가
+### Step 2.4: Ground Plane 추가
 
 임포트 직후 Play(▶)를 누르면 로봇이 **바닥 없이 아래로 떨어집니다**. 반드시 바닥을 먼저 추가하세요:
 
@@ -61,7 +69,7 @@ ls -la /home/cho/ms_AIworker/isaacsim_ai_worker/usd_ai_worker/ffw_sg2_follower.u
 2. Stage에 GroundPlane이 추가됨
 3. 이제 Play(▶) 하면 로봇이 바닥 위에 서있음
 
-### Step 2.4: 임포트 결과 확인
+### Step 2.5: 임포트 결과 확인
 
 임포트 후 Viewport에 로봇이 나타납니다:
 
