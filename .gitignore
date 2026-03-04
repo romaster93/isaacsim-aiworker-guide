@@ -1,0 +1,13 @@
+# IsaacSim resources (large files)
+isaacsim_ai_worker/
+docs/
+
+# OMC state
+.omc/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
