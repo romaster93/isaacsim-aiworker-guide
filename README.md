@@ -29,10 +29,11 @@ NVIDIA IsaacSim 5.1.0 환경에서 **ROBOTIS FFW-SG2 Mobility AI Worker** 로봇
 | [01. Install IsaacSim](guides/01-install-isaacsim.md) | IsaacSim 5.1.0 설치, ROS2 Bridge 설정, conda 환경 구성 | **Completed** |
 | [02. Import URDF](guides/02-import-urdf.md) | FFW-SG2 URDF 임포트, Stage 설정, Physics 구성 | **Completed** |
 | [03. Import Sensors](guides/03-import-sensors.md) | 카메라, LiDAR, IMU 센서 추가 및 ROS2 연동 | **Completed** |
-| [04. Control Humanoids](guides/04-control-humanoids.md) | 휴머노이드 제어 | Pending |
-| [05. Swerve Drive](guides/05-swerve-drive.md) | Swerve Drive 제어 | Pending |
-| [06. Kinematic Override](guides/06-kinematic-override.md) | Kinematic Override Drive | Pending |
-| [07. Navigation System](guides/07-navigation-system.md) | Navigation 시스템 | Pending |
+| [04. Publish TF Tree](guides/04-publish-tf.md) | ROS2 TF 트리 발행 (커스텀) | **In Progress** |
+| [05. Control Humanoids](guides/05-control-humanoids.md) | 휴머노이드 제어 | Pending |
+| [06. Swerve Drive](guides/06-swerve-drive.md) | Swerve Drive 제어 | Pending |
+| [07. Kinematic Override](guides/07-kinematic-override.md) | Kinematic Override Drive | Pending |
+| [08. Navigation System](guides/08-navigation-system.md) | Navigation 시스템 | Pending |
 
 ## Sensors Configuration
 
