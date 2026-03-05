@@ -273,7 +273,13 @@ Docker 컨테이너의 IsaacSim이 발행하는 토픽을 호스트에서 확인
 
 #### 방법 A: conda 환경 사용 (권장 — 호스트에서 ros2, rviz2 그대로 사용)
 
-conda `isaac_sim` 환경에 FastDDS 설정이 포함되어 있으므로, activate만 하면 됩니다:
+자동 설정 스크립트를 실행하면 호스트의 ROS2 버전(Humble/Jazzy)을 감지하고 conda 환경에 FastDDS 설정을 추가합니다:
+```bash
+# 최초 1회 실행
+./scripts/setup-host-ros2.sh
+```
+
+이후 conda 환경만 활성화하면 됩니다:
 ```bash
 conda activate isaac_sim
 ros2 topic list
@@ -282,18 +288,15 @@ rviz2  # RViz도 그냥 사용 가능
 ```
 
 > **원리**: `conda activate isaac_sim` 시 `FASTRTPS_DEFAULT_PROFILES_FILE`과 `RMW_IMPLEMENTATION`이
-> 자동 설정됩니다. `conda deactivate` 하면 원래대로 복원됩니다.
+> 자동 설정됩니다. `conda deactivate` 하면 원래대로 복원되어 호스트 환경에 영향 없습니다.
 
-conda 환경에 직접 추가하려면:
-```bash
-# activate.d 스크립트에 추가 (최초 1회)
-ACTIVATE_SCRIPT="$(conda info --base)/envs/isaac_sim/etc/conda/activate.d/isaacsim_env.sh"
-echo 'export FASTRTPS_DEFAULT_PROFILES_FILE="/path/to/project/fastdds.xml"' >> "$ACTIVATE_SCRIPT"
-
-# deactivate.d 스크립트에 추가
-DEACTIVATE_SCRIPT="$(conda info --base)/envs/isaac_sim/etc/conda/deactivate.d/isaacsim_env.sh"
-echo 'unset FASTRTPS_DEFAULT_PROFILES_FILE' >> "$DEACTIVATE_SCRIPT"
-```
+> **호스트 ROS2 버전별 차이**:
+> | 호스트 ROS2 | Docker 내부 Bridge | DDS 호환 | 비고 |
+> |------------|-------------------|---------|------|
+> | **Jazzy** (Ubuntu 24.04) | Humble Bridge | O | DDS 프로토콜 레벨 호환 |
+> | **Humble** (Ubuntu 22.04) | Humble Bridge | O | 동일 버전, 가장 안정적 |
+>
+> 두 경우 모두 `fastdds.xml` (UDP 강제)이 필요합니다.
 
 #### 방법 B: ros2-docker.sh 래퍼 스크립트 (호스트 환경 변경 없이)
 
