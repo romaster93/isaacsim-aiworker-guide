@@ -16,7 +16,7 @@ NVIDIA IsaacSim 5.1.0 환경에서 **ROBOTIS FFW-SG2 Mobility AI Worker** 로봇
 
 | 항목 | 버전 |
 |------|------|
-| IsaacSim | 5.1.0 (pip install) |
+| IsaacSim | 5.1.0 (pip install / Docker) |
 | OS | Ubuntu 24.04 LTS |
 | Python | 3.11 (conda) |
 | ROS2 | Jazzy (IsaacSim internal bridge) |
@@ -26,14 +26,60 @@ NVIDIA IsaacSim 5.1.0 환경에서 **ROBOTIS FFW-SG2 Mobility AI Worker** 로봇
 
 | Step | 내용 | 상태 |
 |------|------|------|
-| [01. Install IsaacSim](guides/01-install-isaacsim.md) | IsaacSim 5.1.0 설치, ROS2 Bridge 설정, conda 환경 구성 | **Completed** |
-| [02. Import URDF](guides/02-import-urdf.md) | FFW-SG2 URDF 임포트, Stage 설정, Physics 구성 | **Completed** |
-| [03. Import Sensors](guides/03-import-sensors.md) | 카메라, LiDAR, IMU 센서 추가 및 ROS2 연동 | **Completed** |
-| [04. Publish TF Tree](guides/04-publish-tf.md) | ROS2 TF 트리 발행 (커스텀) | **In Progress** |
-| [05. Control Humanoids](guides/05-control-humanoids.md) | 휴머노이드 제어 | Pending |
-| [06. Swerve Drive](guides/06-swerve-drive.md) | Swerve Drive 제어 | Pending |
-| [07. Kinematic Override](guides/07-kinematic-override.md) | Kinematic Override Drive | Pending |
-| [08. Navigation System](guides/08-navigation-system.md) | Navigation 시스템 | Pending |
+| [01. Install IsaacSim](guides/01-install-isaacsim.md) | IsaacSim 5.1.0 설치, ROS2 Bridge 설정, conda 환경 구성 | Completed |
+| [02. Import URDF](guides/02-import-urdf.md) | FFW-SG2 URDF 임포트, Stage 설정, Physics 구성 | Completed |
+| [03. Import Sensors](guides/03-import-sensors.md) | 카메라, LiDAR, IMU 센서 추가 및 ROS2 연동 | Completed |
+| [04. Publish TF Tree](guides/04-publish-tf.md) | ROS2 TF 트리 발행 (커스텀) | Completed |
+| [09. Docker Setup](guides/09-docker-setup.md) | Docker로 IsaacSim 실행 (다른 PC에서 재현) | Completed |
+
+## Quick Start
+
+### 로컬 실행 (IsaacSim 설치된 PC)
+
+```bash
+# 1. conda 환경 활성화
+conda activate isaac_sim
+
+# 2. IsaacSim 실행
+isaacsim
+
+# 3. 저장된 World 열기
+#    Content Browser → isaacsim_ai_worker/usd_ai_worker/Collected_World2/World2.usd
+
+# 4. Play(▶) 후 별도 터미널에서 토픽 확인
+conda activate isaac_sim
+ros2 topic list
+rviz2
+```
+
+### Docker 실행 (IsaacSim 미설치 PC)
+
+NVIDIA Driver + Docker만 있으면 됩니다. 자세한 내용은 [Docker Setup 가이드](guides/09-docker-setup.md) 참고.
+
+```bash
+# 1. 클론
+git clone https://github.com/romaster93/isaacsim-aiworker-guide.git
+cd isaacsim-aiworker-guide
+
+# 2. NGC 로그인 & 베이스 이미지 Pull
+docker login nvcr.io    # Username: $oauthtoken, Password: NGC API Key
+docker pull nvcr.io/nvidia/isaac-sim:5.1.0
+
+# 3. 커스텀 이미지 빌드 (ROS2 Jazzy CLI + FastDDS 설정 포함)
+docker compose build
+
+# 4. 실행
+chmod +x scripts/docker-run.sh scripts/ros2-docker.sh
+./scripts/docker-run.sh gui
+# 컨테이너 안에서: ./runapp.sh
+
+# 5. World 열기
+#    Content Browser → /isaac-sim/workspace/usd_ai_worker/Collected_World2/World2.usd
+
+# 6. 호스트에서 토픽 확인
+./scripts/ros2-docker.sh topic list
+./scripts/ros2-docker.sh topic echo /tf --once
+```
 
 ## Sensors Configuration
 
@@ -64,31 +110,35 @@ FFW-SG2 Mobility AI Worker
 | `/imu/data` | Imu | IMU |
 | `/laser_scan_left` | LaserScan | 2D LiDAR Left |
 | `/laser_scan_right` | LaserScan | 2D LiDAR Right |
+| `/point_cloud` | PointCloud2 | Ouster OS1-128 |
+| `/tf` | TFMessage | TF Tree (전체 관절) |
 
-## Quick Start
+## Project Structure
 
-```bash
-# 1. conda 환경 활성화 (ROS2 env vars 자동 설정됨)
-conda activate isaac_sim
-
-# 2. IsaacSim 실행
-isaacsim
-
-# 3. 저장된 World 열기
-#    Content Browser → isaacsim_ai_worker/usd_ai_worker/Collected_World2/World2.usd
-
-# 4. Play(▶) 후 별도 터미널에서 토픽 확인
-source /opt/ros/jazzy/setup.bash
-ros2 topic list
-rviz2
+```
+isaacsim-aiworker-guide/
+├── Dockerfile                  # IsaacSim + ROS2 Jazzy CLI 커스텀 이미지
+├── docker-compose.yml          # 컨테이너 실행 설정
+├── fastdds.xml                 # FastDDS UDP 설정 (호스트↔컨테이너 통신)
+├── guides/                     # 단계별 가이드
+├── scripts/
+│   ├── docker-run.sh           # Docker 원클릭 실행
+│   ├── docker-setup.sh         # 사전 설정 자동화
+│   ├── ros2-docker.sh          # 호스트에서 토픽 확인 (환경 변경 없음)
+│   └── setup-host-ros2.sh      # 호스트 ROS2 환경 자동 설정
+└── isaacsim_ai_worker/
+    └── usd_ai_worker/
+        └── Collected_World2/   # 센서 구성 완료된 World 파일
+            └── World2.usd
 ```
 
 ## Save File
 
-`isaacsim_ai_worker/usd_ai_worker/Collected_World2/` - 센서 구성이 완료된 IsaacSim World 파일 (Collect As로 저장)
+`isaacsim_ai_worker/usd_ai_worker/Collected_World2/` - 센서 및 TF 구성이 완료된 IsaacSim World 파일 (Collect As로 저장, 모든 에셋 포함)
 
 ## Notes
 
 - 원본 문서는 IsaacSim 5.0.0 기준이며, 이 가이드는 **5.1.0** 기준으로 재작성됨
 - 5.1.0의 주요 UI 차이: `New from Stage Template`, `Graph Editors > Action Graph`, `Collect As` 등
-- ROS2 Bridge는 IsaacSim 내장 Jazzy libs 사용 (별도 ROS2 설치 불필요)
+- ROS2 Bridge는 IsaacSim 내장 Humble libs 사용 (별도 ROS2 설치 불필요)
+- Docker 이미지에는 ROS2 Jazzy CLI가 추가 설치되어 컨테이너 안에서 `ros2` 명령어 사용 가능
