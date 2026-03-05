@@ -77,9 +77,7 @@ chmod +x scripts/docker-run.sh
 #    Content Browser → /isaac-sim/workspace/usd_ai_worker/Collected_World2/World2.usd
 
 # 6. 호스트에서 토픽 확인 (ROS2 설치된 경우)
-source /opt/ros/jazzy/setup.bash  # Humble이면 /opt/ros/humble/setup.bash
-export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-export FASTRTPS_DEFAULT_PROFILES_FILE="$(pwd)/fastdds.xml"
+source scripts/ros2-bridge-env.sh
 ros2 topic list
 rviz2
 ```
@@ -125,7 +123,8 @@ isaacsim-aiworker-guide/
 ├── fastdds.xml                 # FastDDS UDP 설정 (호스트↔컨테이너 통신)
 ├── guides/                     # 단계별 가이드
 ├── scripts/
-│   └── docker-run.sh           # Docker 원클릭 실행
+│   ├── docker-run.sh           # Docker 원클릭 실행
+│   └── ros2-bridge-env.sh      # 호스트 ROS2 환경 설정 (source로 사용)
 └── isaacsim_ai_worker/
     └── usd_ai_worker/
         └── Collected_World2/   # 센서 구성 완료된 World 파일

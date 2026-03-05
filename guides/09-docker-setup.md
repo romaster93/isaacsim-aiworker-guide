@@ -266,15 +266,11 @@ Docker 컨테이너의 IsaacSim이 발행하는 토픽을 호스트에서 확인
 
 #### 방법 A: 호스트 터미널에서 직접 사용 (ros2, rviz2 모두 가능)
 
-호스트에 ROS2가 설치되어 있으면 환경변수만 설정하면 됩니다:
+호스트에 ROS2가 설치되어 있으면 환경 설정 스크립트를 `source`하면 됩니다:
 
 ```bash
-# ROS2 소싱 (Jazzy 예시, Humble이면 /opt/ros/humble/setup.bash)
-source /opt/ros/jazzy/setup.bash
-
-# FastDDS UDP 설정 (프로젝트 경로에 맞게 수정)
-export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-export FASTRTPS_DEFAULT_PROFILES_FILE="$(pwd)/fastdds.xml"
+# 프로젝트 디렉토리에서 실행
+source scripts/ros2-bridge-env.sh
 
 # 이제 ros2, rviz2 모두 사용 가능
 ros2 topic list
@@ -282,7 +278,11 @@ ros2 topic echo /tf --once
 rviz2
 ```
 
-> **매번 입력이 번거로우면** `~/.bashrc`에 추가하거나, 위 내용을 스크립트로 만들어 `source`하세요.
+> **스크립트가 하는 일**: 호스트의 ROS2 버전(Jazzy/Humble)을 자동 감지하고, FastDDS UDP 설정을 적용합니다.
+> 설정은 **현재 터미널에서만** 유효하며, 새 터미널을 열면 원래대로 복원됩니다.
+> 따라서 다른 터미널에서 진행 중인 로컬 ROS2 프로젝트에는 영향이 없습니다.
+>
+> 수동 해제: `unset FASTRTPS_DEFAULT_PROFILES_FILE RMW_IMPLEMENTATION`
 
 > **호스트 ROS2 버전별 차이**:
 > | 호스트 ROS2 | Docker 내부 Bridge | DDS 호환 | 비고 |
@@ -444,9 +444,7 @@ chmod +x scripts/docker-run.sh scripts/ros2-docker.sh
 # Content 브라우저 → /isaac-sim/workspace/usd_ai_worker/Collected_World2/World2.usd
 
 # 9. 호스트에서 토픽 확인 (ROS2 설치된 경우)
-source /opt/ros/jazzy/setup.bash  # Humble이면 /opt/ros/humble/setup.bash
-export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-export FASTRTPS_DEFAULT_PROFILES_FILE="$(pwd)/fastdds.xml"
+source scripts/ros2-bridge-env.sh
 ros2 topic list
 rviz2
 ```
