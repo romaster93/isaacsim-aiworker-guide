@@ -328,17 +328,7 @@ docker run --name isaac-sim --entrypoint bash -it \
 
 ### ROS2 토픽 확인
 
-**컨테이너 안에서** (IsaacSim Play 상태):
-```bash
-# 새 터미널로 컨테이너 접속
-docker exec -it isaac-sim bash
-
-# 내장 ROS2 사용
-source /opt/ros/humble/setup.bash
-ros2 topic list
-```
-
-**호스트에서** (호스트에 ROS2가 설치된 경우):
+**호스트에서 확인** (권장):
 ```bash
 # network_mode: host이므로 호스트에서 바로 토픽 확인 가능
 source /opt/ros/jazzy/setup.bash
@@ -348,6 +338,11 @@ ros2 topic list
 > **`network_mode: host`** 를 사용하기 때문에 컨테이너와 호스트가 같은 네트워크를 공유합니다.
 > 호스트에서 `ros2 topic list`로 컨테이너 안의 IsaacSim 토픽을 바로 볼 수 있습니다.
 > RViz2도 호스트에서 실행하여 시각화할 수 있습니다.
+
+> **주의**: 컨테이너 안에는 `/opt/ros/humble`이 설치되어 있지 않습니다.
+> ROS2 CLI(`ros2 topic list` 등)는 **호스트에서** 실행하세요.
+> 컨테이너 내부에는 IsaacSim의 ROS2 Bridge 내장 라이브러리만 포함되어 있어
+> IsaacSim이 토픽을 발행하는 것은 가능하지만, ROS2 CLI 도구는 없습니다.
 
 ---
 
