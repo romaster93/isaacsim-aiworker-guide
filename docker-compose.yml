@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  isaac-sim:
+    image: nvcr.io/nvidia/isaac-sim:5.1.0
+    container_name: isaac-sim
+    entrypoint: bash
+    stdin_open: true
+    tty: true
+    network_mode: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - ACCEPT_EULA=Y
+      - PRIVACY_CONSENT=Y
+      - ROS_DISTRO=humble
+      - FASTRTPS_DEFAULT_PROFILES_FILE=/isaac-sim/fastdds.xml
+      - DISPLAY=${DISPLAY}
+    volumes:
+      # IsaacSim 캐시 (성능 향상 - 재시작 시 로딩 빨라짐)
+      - isaac-cache:/isaac-sim/.cache:rw
+      - isaac-computecache:/isaac-sim/.nv/ComputeCache:rw
+      # IsaacSim 설정/로그
+      - isaac-logs:/isaac-sim/.nvidia-omniverse/logs:rw
+      - isaac-config:/isaac-sim/.nvidia-omniverse/config:rw
+      - isaac-data:/isaac-sim/.local/share/ov/data:rw
+      - isaac-pkg:/isaac-sim/.local/share/ov/pkg:rw
+      # 프로젝트 USD 파일 마운트 (호스트 ↔ 컨테이너 공유)
+      - ./isaacsim_ai_worker:/isaac-sim/workspace:rw
+      # GUI 모드용 X11
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    user: "1234:1234"
+
+volumes:
+  isaac-cache:
+  isaac-computecache:
+  isaac-logs:
+  isaac-config:
+  isaac-data:
+  isaac-pkg:
