@@ -400,10 +400,11 @@ failed to load shared library 'librmw_fastrtps_cpp.so'
 → IsaacSim 내부 `setup_ros_env.sh`가 자동으로 환경 설정합니다. `./runapp.sh`로 실행하면 자동 처리됨.
 
 ### 호스트에서 ROS2 토픽 데이터가 안 옴
-FastDDS Shared Memory 문제입니다. `ros2-docker.sh`를 사용하세요:
+FastDDS Shared Memory 문제입니다. 환경 설정 스크립트를 사용하세요:
 ```bash
-./scripts/ros2-docker.sh topic list        # 토픽 목록
-./scripts/ros2-docker.sh topic echo /tf    # TF 데이터
+source scripts/ros2-bridge-env.sh
+ros2 topic list
+ros2 topic echo /tf --once
 ```
 
 ### 컨테이너 이름 충돌 (container name already in use)
@@ -448,7 +449,7 @@ docker pull nvcr.io/nvidia/isaac-sim:5.1.0
 docker compose build
 
 # 7. 실행
-chmod +x scripts/docker-run.sh scripts/ros2-docker.sh
+chmod +x scripts/docker-run.sh
 ./scripts/docker-run.sh gui
 # 컨테이너 안에서: ./runapp.sh
 
