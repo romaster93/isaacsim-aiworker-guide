@@ -407,6 +407,18 @@ FastDDS Shared Memory 문제입니다. `ros2-docker.sh`를 사용하세요:
 ./scripts/ros2-docker.sh topic echo /tf    # TF 데이터
 ```
 
+### 컨테이너 이름 충돌 (container name already in use)
+```
+Error response from daemon: Conflict. The container name "/isaac-sim" is already in use
+```
+→ 이전에 실행했던 컨테이너가 남아있는 경우입니다. 기존 컨테이너를 정리하고 다시 실행하세요:
+```bash
+docker stop isaac-sim && docker rm isaac-sim
+./scripts/docker-run.sh gui
+```
+> **참고**: `docker compose down`으로도 정리 가능하지만, 이 경우 Named Volume은 유지됩니다 (캐시 보존).
+> 볼륨까지 완전히 삭제하려면 `docker compose down -v`를 사용하세요.
+
 ### 커널 업데이트 후 GPU 인식 안 됨
 ```
 NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver
