@@ -1,11 +1,8 @@
-version: '3.8'
-
 services:
   isaac-sim:
-    image: nvcr.io/nvidia/isaac-sim:5.1.0
+    build: .
+    image: isaac-sim-ros2:5.1.0
     container_name: isaac-sim
-    entrypoint: ["/isaac-sim/scripts/docker-entrypoint.sh"]
-    command: bash
     stdin_open: true
     tty: true
     network_mode: host
@@ -20,11 +17,6 @@ services:
       - ACCEPT_EULA=Y
       - PRIVACY_CONSENT=Y
       - DISPLAY=${DISPLAY}
-      # ROS2 Bridge 환경변수
-      - ROS_DISTRO=humble
-      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-      - LD_LIBRARY_PATH=/isaac-sim/exts/isaacsim.ros2.bridge/humble/lib
-      - FASTRTPS_DEFAULT_PROFILES_FILE=/isaac-sim/fastdds.xml
     volumes:
       # IsaacSim 캐시 (성능 향상 - 재시작 시 로딩 빨라짐)
       - isaac-cache:/isaac-sim/.cache:rw
@@ -34,9 +26,8 @@ services:
       - isaac-config:/isaac-sim/.nvidia-omniverse/config:rw
       - isaac-data:/isaac-sim/.local/share/ov/data:rw
       - isaac-pkg:/isaac-sim/.local/share/ov/pkg:rw
-      # 프로젝트 파일 마운트 (호스트 ↔ 컨테이너 공유)
+      # 프로젝트 USD 파일 마운트 (호스트 ↔ 컨테이너 공유)
       - ./isaacsim_ai_worker:/isaac-sim/workspace:rw
-      - ./scripts:/isaac-sim/scripts:ro
       # GUI 모드용 X11
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ${HOME}/.Xauthority:/root/.Xauthority:ro
