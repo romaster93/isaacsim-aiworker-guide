@@ -1,5 +1,12 @@
-# IsaacSim resources (large files)
-isaacsim_ai_worker/
+# IsaacSim resources (원본 소스 - Collected_World2에 이미 포함됨)
+isaacsim_ai_worker/usd_ai_worker/ffw_sg2_follower/
+isaacsim_ai_worker/usd_ai_worker/meshes/
+isaacsim_ai_worker/usd_ai_worker/usd_ai_worker.usd
+isaacsim_ai_worker/usd_ai_worker/ffw_sg2_follower.urdf
+isaacsim_ai_worker/usd_env/
+# 백업 zip
+*.zip
+# docs
 docs/
 
 # OMC state
