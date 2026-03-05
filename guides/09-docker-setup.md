@@ -284,6 +284,16 @@ rviz2
 >
 > 수동 해제: `unset FASTRTPS_DEFAULT_PROFILES_FILE RMW_IMPLEMENTATION`
 
+> **왜 이 설정이 필요한가?**
+>
+> FastDDS는 기본적으로 **Shared Memory** 통신을 사용합니다. 같은 PC 안에서는 가장 빠르지만,
+> Docker 컨테이너와 호스트 간에는 Shared Memory가 공유되지 않아 토픽 데이터가 전달되지 않습니다.
+> `FASTRTPS_DEFAULT_PROFILES_FILE`로 **UDP 통신을 강제**하면 `network_mode: host`를 통해 정상 통신됩니다.
+>
+> **다른 로컬 ROS2 프로젝트에 영향은?**
+> - `RMW_IMPLEMENTATION=rmw_fastrtps_cpp`: 대부분의 ROS2 설치에서 기본값이므로 영향 없습니다.
+> - `FASTRTPS_DEFAULT_PROFILES_FILE`: Shared Memory 대신 UDP를 사용하므로, 로컬 노드 간 통신이 약간 느려질 수 있습니다. 하지만 기능상 문제는 없으며, 이 설정은 현재 터미널에서만 유효하므로 **다른 터미널의 ROS2는 영향을 받지 않습니다.**
+
 > **호스트 ROS2 버전별 차이**:
 > | 호스트 ROS2 | Docker 내부 Bridge | DDS 호환 | 비고 |
 > |------------|-------------------|---------|------|
