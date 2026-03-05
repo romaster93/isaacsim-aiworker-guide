@@ -69,16 +69,19 @@ docker pull nvcr.io/nvidia/isaac-sim:5.1.0
 docker compose build
 
 # 4. 실행
-chmod +x scripts/docker-run.sh scripts/ros2-docker.sh
+chmod +x scripts/docker-run.sh
 ./scripts/docker-run.sh gui
 # 컨테이너 안에서: ./runapp.sh
 
 # 5. World 열기
 #    Content Browser → /isaac-sim/workspace/usd_ai_worker/Collected_World2/World2.usd
 
-# 6. 호스트에서 토픽 확인
-./scripts/ros2-docker.sh topic list
-./scripts/ros2-docker.sh topic echo /tf --once
+# 6. 호스트에서 토픽 확인 (ROS2 설치된 경우)
+source /opt/ros/jazzy/setup.bash  # Humble이면 /opt/ros/humble/setup.bash
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export FASTRTPS_DEFAULT_PROFILES_FILE="$(pwd)/fastdds.xml"
+ros2 topic list
+rviz2
 ```
 
 ## Sensors Configuration
@@ -122,10 +125,7 @@ isaacsim-aiworker-guide/
 ├── fastdds.xml                 # FastDDS UDP 설정 (호스트↔컨테이너 통신)
 ├── guides/                     # 단계별 가이드
 ├── scripts/
-│   ├── docker-run.sh           # Docker 원클릭 실행
-│   ├── docker-setup.sh         # 사전 설정 자동화
-│   ├── ros2-docker.sh          # 호스트에서 토픽 확인 (환경 변경 없음)
-│   └── setup-host-ros2.sh      # 호스트 ROS2 환경 자동 설정
+│   └── docker-run.sh           # Docker 원클릭 실행
 └── isaacsim_ai_worker/
     └── usd_ai_worker/
         └── Collected_World2/   # 센서 구성 완료된 World 파일

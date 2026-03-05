@@ -32,7 +32,6 @@ Docker를 사용하면 IsaacSim을 직접 설치하지 않고도 컨테이너로
 | `docker-compose.yml` | 컨테이너 실행 설정 (GPU, 볼륨, X11) |
 | `fastdds.xml` | DDS를 UDP로 강제 (Shared Memory 비활성화) |
 | `scripts/docker-run.sh` | 원클릭 실행 스크립트 |
-| `scripts/ros2-docker.sh` | 호스트에서 컨테이너 토픽 확인 (호스트 환경 변경 없음) |
 
 > **왜 FastDDS UDP가 필요한가?**
 > FastDDS는 기본적으로 Shared Memory 통신을 사용합니다. 하지만 Docker 컨테이너와 호스트 간에는
@@ -80,7 +79,7 @@ nvidia-smi
 ### 설치가 필요한 경우
 
 ```bash
-sudo apt update
+dsudo apt update
 sudo apt install -y nvidia-driver-570
 sudo reboot
 ```
@@ -207,7 +206,7 @@ FROM nvcr.io/nvidia/isaac-sim:5.1.0
 
 ```bash
 # 사전 설정 (최초 1회)
-chmod +x scripts/docker-run.sh scripts/ros2-docker.sh
+chmod +x scripts/docker-run.sh
 
 # GUI 모드로 실행 (자동으로 빌드, 권한설정, 컨테이너 시작)
 ./scripts/docker-run.sh gui
@@ -216,12 +215,6 @@ chmod +x scripts/docker-run.sh scripts/ros2-docker.sh
 컨테이너 쉘에 접속되면:
 ```bash
 ./runapp.sh
-```
-
-호스트에서 ROS2 토픽 확인 (호스트 환경 변경 없음):
-```bash
-./scripts/ros2-docker.sh topic list
-./scripts/ros2-docker.sh topic echo /tf --once
 ```
 
 실행 스크립트 모드:
@@ -271,24 +264,25 @@ IsaacSim GUI가 실행되면:
 Docker 컨테이너의 IsaacSim이 발행하는 토픽을 호스트에서 확인하려면 **FastDDS UDP 설정**이 필요합니다.
 (기본 Shared Memory 통신은 컨테이너↔호스트 간에 동작하지 않음)
 
-#### 방법 A: conda 환경 사용 (권장 — 호스트에서 ros2, rviz2 그대로 사용)
+#### 방법 A: 호스트 터미널에서 직접 사용 (ros2, rviz2 모두 가능)
 
-자동 설정 스크립트를 실행하면 호스트의 ROS2 버전(Humble/Jazzy)을 감지하고 conda 환경에 FastDDS 설정을 추가합니다:
-```bash
-# 최초 1회 실행
-./scripts/setup-host-ros2.sh
-```
+호스트에 ROS2가 설치되어 있으면 환경변수만 설정하면 됩니다:
 
-이후 conda 환경만 활성화하면 됩니다:
 ```bash
-conda activate isaac_sim
+# ROS2 소싱 (Jazzy 예시, Humble이면 /opt/ros/humble/setup.bash)
+source /opt/ros/jazzy/setup.bash
+
+# FastDDS UDP 설정 (프로젝트 경로에 맞게 수정)
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export FASTRTPS_DEFAULT_PROFILES_FILE="$(pwd)/fastdds.xml"
+
+# 이제 ros2, rviz2 모두 사용 가능
 ros2 topic list
 ros2 topic echo /tf --once
-rviz2  # RViz도 그냥 사용 가능
+rviz2
 ```
 
-> **원리**: `conda activate isaac_sim` 시 `FASTRTPS_DEFAULT_PROFILES_FILE`과 `RMW_IMPLEMENTATION`이
-> 자동 설정됩니다. `conda deactivate` 하면 원래대로 복원되어 호스트 환경에 영향 없습니다.
+> **매번 입력이 번거로우면** `~/.bashrc`에 추가하거나, 위 내용을 스크립트로 만들어 `source`하세요.
 
 > **호스트 ROS2 버전별 차이**:
 > | 호스트 ROS2 | Docker 내부 Bridge | DDS 호환 | 비고 |
@@ -298,17 +292,7 @@ rviz2  # RViz도 그냥 사용 가능
 >
 > 두 경우 모두 `fastdds.xml` (UDP 강제)이 필요합니다.
 
-#### 방법 B: ros2-docker.sh 래퍼 스크립트 (호스트 환경 변경 없이)
-
-```bash
-./scripts/ros2-docker.sh topic list
-./scripts/ros2-docker.sh topic echo /tf --once
-./scripts/ros2-docker.sh topic hz /tf
-```
-
-> `ros2-docker.sh`는 FastDDS UDP 설정과 `RMW_IMPLEMENTATION`을 **임시로** 적용하여 `ros2` 명령을 실행합니다. 호스트의 환경변수는 변경하지 않습니다. 단, `rviz2`는 이 방법으로 실행할 수 없습니다.
-
-#### 방법 C: 컨테이너 안에서 직접 확인
+#### 방법 B: 컨테이너 안에서 직접 확인
 
 ```bash
 # 별도 터미널에서 컨테이너 접속
@@ -316,6 +300,9 @@ docker exec -it isaac-sim bash
 ros2 topic list
 ros2 topic echo /tf --once
 ```
+
+> 컨테이너 안에는 ROS2 Jazzy CLI가 설치되어 있어 바로 사용 가능합니다.
+> 단, `rviz2`는 컨테이너 안에서 사용할 수 없습니다 (GUI 의존성 미설치).
 
 ---
 
@@ -456,16 +443,15 @@ chmod +x scripts/docker-run.sh scripts/ros2-docker.sh
 # 8. USD 파일 열기
 # Content 브라우저 → /isaac-sim/workspace/usd_ai_worker/Collected_World2/World2.usd
 
-# 9. 호스트에서 토픽 확인
-# 방법 A: conda 환경 (rviz2도 사용 가능)
-conda activate isaac_sim
+# 9. 호스트에서 토픽 확인 (ROS2 설치된 경우)
+source /opt/ros/jazzy/setup.bash  # Humble이면 /opt/ros/humble/setup.bash
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export FASTRTPS_DEFAULT_PROFILES_FILE="$(pwd)/fastdds.xml"
 ros2 topic list
-ros2 topic echo /tf --once
-# 방법 B: 래퍼 스크립트 (환경 변경 없음)
-./scripts/ros2-docker.sh topic list
+rviz2
 ```
 
 ---
 **Status**: COMPLETED
-**생성된 파일**: `Dockerfile`, `docker-compose.yml`, `fastdds.xml`, `scripts/docker-run.sh`, `scripts/ros2-docker.sh`
+**생성된 파일**: `Dockerfile`, `docker-compose.yml`, `fastdds.xml`, `scripts/docker-run.sh`
 **관련 가이드**: 이 문서는 번외 가이드입니다. 메인 순서는 [Step 1](01-install-isaacsim.md)부터 시작하세요.
