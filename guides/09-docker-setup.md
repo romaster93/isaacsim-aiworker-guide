@@ -311,8 +311,10 @@ ros2 topic list
 ros2 topic echo /tf --once
 ```
 
-> 컨테이너 안에는 ROS2 Jazzy CLI가 설치되어 있어 바로 사용 가능합니다.
+> 컨테이너 안에는 ROS2 Jazzy CLI와 FastDDS UDP 설정이 이미 포함되어 있어,
+> **별도 환경변수 설정 없이** 바로 `ros2` 명령어를 사용할 수 있습니다.
 > 단, `rviz2`는 컨테이너 안에서 사용할 수 없습니다 (GUI 의존성 미설치).
+> rviz2로 시각화가 필요하면 호스트에서 방법 A를 사용하세요.
 
 ---
 
