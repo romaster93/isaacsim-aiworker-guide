@@ -268,23 +268,51 @@ IsaacSim GUI가 실행되면:
 
 ### ROS2 토픽 확인
 
-**호스트에서 확인 (ros2-docker.sh 사용)**:
+Docker 컨테이너의 IsaacSim이 발행하는 토픽을 호스트에서 확인하려면 **FastDDS UDP 설정**이 필요합니다.
+(기본 Shared Memory 통신은 컨테이너↔호스트 간에 동작하지 않음)
+
+#### 방법 A: conda 환경 사용 (권장 — 호스트에서 ros2, rviz2 그대로 사용)
+
+conda `isaac_sim` 환경에 FastDDS 설정이 포함되어 있으므로, activate만 하면 됩니다:
 ```bash
-# 호스트 환경을 변경하지 않고 토픽 확인
+conda activate isaac_sim
+ros2 topic list
+ros2 topic echo /tf --once
+rviz2  # RViz도 그냥 사용 가능
+```
+
+> **원리**: `conda activate isaac_sim` 시 `FASTRTPS_DEFAULT_PROFILES_FILE`과 `RMW_IMPLEMENTATION`이
+> 자동 설정됩니다. `conda deactivate` 하면 원래대로 복원됩니다.
+
+conda 환경에 직접 추가하려면:
+```bash
+# activate.d 스크립트에 추가 (최초 1회)
+ACTIVATE_SCRIPT="$(conda info --base)/envs/isaac_sim/etc/conda/activate.d/isaacsim_env.sh"
+echo 'export FASTRTPS_DEFAULT_PROFILES_FILE="/path/to/project/fastdds.xml"' >> "$ACTIVATE_SCRIPT"
+
+# deactivate.d 스크립트에 추가
+DEACTIVATE_SCRIPT="$(conda info --base)/envs/isaac_sim/etc/conda/deactivate.d/isaacsim_env.sh"
+echo 'unset FASTRTPS_DEFAULT_PROFILES_FILE' >> "$DEACTIVATE_SCRIPT"
+```
+
+#### 방법 B: ros2-docker.sh 래퍼 스크립트 (호스트 환경 변경 없이)
+
+```bash
 ./scripts/ros2-docker.sh topic list
 ./scripts/ros2-docker.sh topic echo /tf --once
 ./scripts/ros2-docker.sh topic hz /tf
 ```
 
-**컨테이너 안에서 확인**:
+> `ros2-docker.sh`는 FastDDS UDP 설정과 `RMW_IMPLEMENTATION`을 **임시로** 적용하여 `ros2` 명령을 실행합니다. 호스트의 환경변수는 변경하지 않습니다. 단, `rviz2`는 이 방법으로 실행할 수 없습니다.
+
+#### 방법 C: 컨테이너 안에서 직접 확인
+
 ```bash
 # 별도 터미널에서 컨테이너 접속
 docker exec -it isaac-sim bash
 ros2 topic list
 ros2 topic echo /tf --once
 ```
-
-> **`ros2-docker.sh`가 하는 일**: FastDDS UDP 설정(`fastdds.xml`)과 `RMW_IMPLEMENTATION`을 임시로 적용하여 `ros2` 명령을 실행합니다. 호스트의 환경변수는 변경하지 않습니다.
 
 ---
 
@@ -414,8 +442,12 @@ chmod +x scripts/docker-run.sh scripts/ros2-docker.sh
 # Content 브라우저 → /isaac-sim/workspace/usd_ai_worker/Collected_World2/World2.usd
 
 # 9. 호스트에서 토픽 확인
+# 방법 A: conda 환경 (rviz2도 사용 가능)
+conda activate isaac_sim
+ros2 topic list
+ros2 topic echo /tf --once
+# 방법 B: 래퍼 스크립트 (환경 변경 없음)
 ./scripts/ros2-docker.sh topic list
-./scripts/ros2-docker.sh topic echo /tf --once
 ```
 
 ---
