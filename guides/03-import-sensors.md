@@ -222,6 +222,76 @@ rviz2  # 시각화 확인
 
 ---
 
+## [1-4] Intel D405 → ROS2 RGB 발행 (양팔)
+
+양팔 손목의 D405 카메라 RGB 이미지를 ROS2 토픽으로 발행합니다.
+**기존 카메라 Action Graph에 노드를 추가**합니다 (새 Action Graph 불필요).
+
+> **참고**: Action Graph에서 노드 복사-붙여넣기(Ctrl+V)는 동작하지 않습니다.
+> 반드시 **우클릭 → 검색으로 노드를 하나씩 추가**하세요.
+
+### 노드 추가 (팔 하나당 3개, 양팔 총 6개)
+
+| 노드 | 역할 |
+|------|------|
+| **Isaac Create Render Product** | 카메라 prim에서 렌더링 이미지 생성 |
+| **ROS2 Camera Helper** | RGB 이미지를 ROS2 토픽으로 발행 |
+| **ROS2 Camera Info Helper** | 카메라 캘리브레이션 정보 발행 |
+
+### 노드 연결 (팔 하나당)
+
+기존 **On Playback Tick**, **ROS2 Context** 노드를 재사용합니다.
+
+```
+On Playback Tick [Tick] ──→ Isaac Create Render Product [ExecIn]
+On Playback Tick [Tick] ──→ ROS2 Camera Helper [ExecIn]
+On Playback Tick [Tick] ──→ ROS2 Camera Info Helper [ExecIn]
+
+ROS2 Context [Context] ──→ ROS2 Camera Helper [Context]
+ROS2 Context [Context] ──→ ROS2 Camera Info Helper [Context]
+
+Isaac Create Render Product [Render Product] ──→ ROS2 Camera Helper [Render Product]
+Isaac Create Render Product [Render Product] ──→ ROS2 Camera Info Helper [Render Product]
+```
+
+### 속성 설정
+
+#### 왼팔 D405
+
+| 노드 | 항목 | 값 |
+|------|------|-----|
+| Isaac Create Render Product | cameraPrim | `arm_l_link7 > d405 > CameraLeftArm` |
+| ROS2 Camera Helper | type | **rgb** |
+| ROS2 Camera Helper | topicName | `/d405_left/image_raw` |
+| ROS2 Camera Helper | frameId | `CameraLeftArm` |
+| ROS2 Camera Info Helper | topicName | `/d405_left/camera_info` |
+| ROS2 Camera Info Helper | frameId | `CameraLeftArm` |
+
+#### 오른팔 D405
+
+| 노드 | 항목 | 값 |
+|------|------|-----|
+| Isaac Create Render Product | cameraPrim | `arm_r_link7 > d405 > CameraRightArm` |
+| ROS2 Camera Helper | type | **rgb** |
+| ROS2 Camera Helper | topicName | `/d405_right/image_raw` |
+| ROS2 Camera Helper | frameId | `CameraRightArm` |
+| ROS2 Camera Info Helper | topicName | `/d405_right/camera_info` |
+| ROS2 Camera Info Helper | frameId | `CameraRightArm` |
+
+> **카메라 prim 이름 확인**: Stage 트리에서 `arm_l_link7 > d405` / `arm_r_link7 > d405` 하위의
+> 카메라 이름이 다를 수 있습니다. 실제 Stage에서 확인 후 설정하세요.
+
+### 발행되는 토픽
+
+| 토픽 | 메시지 타입 | 내용 |
+|------|------------|------|
+| `/d405_left/image_raw` | sensor_msgs/Image | 왼팔 RGB 이미지 |
+| `/d405_left/camera_info` | sensor_msgs/CameraInfo | 왼팔 카메라 캘리브레이션 |
+| `/d405_right/image_raw` | sensor_msgs/Image | 오른팔 RGB 이미지 |
+| `/d405_right/camera_info` | sensor_msgs/CameraInfo | 오른팔 카메라 캘리브레이션 |
+
+---
+
 ## [2] 3D LiDAR (Ouster OS1-128)
 
 ### 절차
