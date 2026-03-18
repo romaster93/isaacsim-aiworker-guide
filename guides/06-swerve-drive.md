@@ -779,6 +779,13 @@ ros2 topic echo /isaac_sim/joint_commands --once
 - Docker 컨테이너가 실행 중인지 확인
 - `conda deactivate` 했는지 확인 (Python 3.13 vs 3.12 충돌)
 
+### 바퀴가 돌지만 로봇 자체가 안 움직임 (바닥에 고정됨)
+
+- URDF를 **Fixed Base**로 잘못 임포트한 경우입니다
+- Stage에서 `ffw_sg2_follower` 아래를 확인: `world`와 `base_link`가 **같은 레벨**이어야 정상
+- `world` 아래에 `base_link`가 있으면 Fixed Base → Step 2에서 URDF 재임포트 필요
+  (Fix Base Link: **체크 해제**)
+
 ### 토픽은 발행되는데 IsaacSim에서 반응 없음
 
 - Step 5의 Action Graph (`/JointControlGraph`)가 있는지 확인

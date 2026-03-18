@@ -94,6 +94,24 @@ ffw_sg2_follower
 > Moveable Base로 임포트하면 IsaacSim이 floating joint를 생성하면서 계층이 평탄화됩니다.
 > TF 발행은 URDF의 관절 관계를 따르므로, TF 트리에서는 여전히 `world → base_link`로 나타납니다.
 
+> **경고: Stage에서 `world` 아래에 `base_link`가 있으면 잘못된 것입니다!**
+>
+> ```
+> ❌ 잘못된 구조 (Fixed Base로 임포트됨)
+> ffw_sg2_follower
+> └── world
+>     └── base_link       ← world 하위에 있으면 Fixed Base
+>
+> ✅ 올바른 구조 (Moveable Base로 임포트됨)
+> ffw_sg2_follower
+> ├── world               ← 같은 레벨이어야 Moveable Base
+> ├── base_link
+> ```
+>
+> FFW-SG2는 이동 로봇이므로 반드시 **Moveable Base**로 임포트해야 합니다.
+> Fixed Base로 임포트하면 바퀴가 돌아도 로봇 자체가 바닥에 고정되어 움직이지 않습니다.
+> 잘못 임포트했다면 Step 2에서 URDF를 다시 임포트하세요 (Joint Drive Type: **None**, Fix Base Link: **체크 해제**).
+
 **Articulation Root 확인 방법:**
 1. Stage에서 `ffw_sg2_follower > world` 클릭
 2. Property에 **Articulation Root** 항목이 있으면 이것이 실제 Articulation Root
