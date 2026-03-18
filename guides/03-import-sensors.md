@@ -260,7 +260,7 @@ Isaac Create Render Product [Render Product] ──→ ROS2 Camera Info Helper [
 
 | 노드 | 항목 | 값 |
 |------|------|-----|
-| Isaac Create Render Product | cameraPrim | `arm_l_link7 > d405 > CameraLeftArm` |
+| Isaac Create Render Product | cameraPrim | `camera_l_link > d405 > CameraLeftArm` |
 | ROS2 Camera Helper | type | **rgb** |
 | ROS2 Camera Helper | topicName | `/d405_left/image_raw` |
 | ROS2 Camera Helper | frameId | `CameraLeftArm` |
@@ -271,14 +271,14 @@ Isaac Create Render Product [Render Product] ──→ ROS2 Camera Info Helper [
 
 | 노드 | 항목 | 값 |
 |------|------|-----|
-| Isaac Create Render Product | cameraPrim | `arm_r_link7 > d405 > CameraRightArm` |
+| Isaac Create Render Product | cameraPrim | `camera_r_link > d405 > CameraRightArm` |
 | ROS2 Camera Helper | type | **rgb** |
 | ROS2 Camera Helper | topicName | `/d405_right/image_raw` |
 | ROS2 Camera Helper | frameId | `CameraRightArm` |
 | ROS2 Camera Info Helper | topicName | `/d405_right/camera_info` |
 | ROS2 Camera Info Helper | frameId | `CameraRightArm` |
 
-> **카메라 prim 이름 확인**: Stage 트리에서 `arm_l_link7 > d405` / `arm_r_link7 > d405` 하위의
+> **카메라 prim 이름 확인**: Stage 트리에서 `camera_l_link > d405` / `camera_r_link > d405` 하위의
 > 카메라 이름이 다를 수 있습니다. 실제 Stage에서 확인 후 설정하세요.
 
 ### 발행되는 토픽

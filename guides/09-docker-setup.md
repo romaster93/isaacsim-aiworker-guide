@@ -338,6 +338,8 @@ services:
     build: .                     # Dockerfile로 커스텀 이미지 빌드
     image: isaac-sim-ros2:5.1.0  # 빌드된 이미지 이름
     network_mode: host           # 호스트와 네트워크 공유 (ROS2 DDS 통신)
+    ipc: host                    # MIT-SHM X11 프리징 방지
+    shm_size: '2gb'              # GPU 공유 메모리 부족 방지 (기본 64MB → 2GB)
     deploy:
       resources:
         reservations:
@@ -349,6 +351,7 @@ services:
       - ACCEPT_EULA=Y            # 라이선스 동의 (필수)
       - PRIVACY_CONSENT=Y        # 개인정보 동의 (필수)
       - DISPLAY=${DISPLAY}       # GUI 모드용 X11
+      - QT_X11_NO_MITSHM=1      # Qt MIT-SHM 비활성화 (Docker GUI 안정성)
     volumes:
       - ./isaacsim_ai_worker:/isaac-sim/workspace:rw  # USD 파일 마운트
       - /tmp/.X11-unix:/tmp/.X11-unix:rw              # X11 소켓
@@ -418,6 +421,45 @@ docker stop isaac-sim && docker rm isaac-sim
 ```
 > **참고**: `docker compose down`으로도 정리 가능하지만, 이 경우 Named Volume은 유지됩니다 (캐시 보존).
 > 볼륨까지 완전히 삭제하려면 `docker compose down -v`를 사용하세요.
+
+### Action Graph 에디터에서 GUI 프리징 (멈춤)
+
+IsaacSim 5.1.0의 **확인된 버그**입니다 (GitHub [#329](https://github.com/isaac-sim/IsaacSim/issues/329), [#490](https://github.com/isaac-sim/IsaacSim/issues/490)).
+노드 추가/연결/삭제/복사-붙여넣기 시 GUI가 멈추며, 공식 fix는 아직 없습니다.
+
+**완화 방법:**
+- `docker-compose.yml`에 `ipc: host`, `shm_size: '2gb'`, `QT_X11_NO_MITSHM=1` 추가 (Docker X11 원인 완화)
+- Play → Stop 직후 편집을 피하기 (프리징 확률 높아짐)
+- 노드 복사-붙여넣기(Ctrl+V) 사용 금지 → **우클릭 → 검색으로 하나씩 추가**
+
+**근본 해결: Python 스크립트로 Action Graph 생성**
+
+GUI를 우회하여 `Window` → `Script Editor`에서 Python으로 노드를 추가할 수 있습니다:
+```python
+import omni.graph.core as og
+keys = og.Controller.Keys
+
+og.Controller.edit(
+    "/ActionGraph",  # 기존 Action Graph 경로
+    {
+        keys.CREATE_NODES: [
+            ("CreateRenderProduct_d405r", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+            ("CameraHelper_d405r", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+        ],
+        keys.SET_VALUES: [
+            ("CreateRenderProduct_d405r.inputs:cameraPrim", "/ffw_sg2_follower/arm_r_link7/d405/CameraRightArm"),
+            ("CameraHelper_d405r.inputs:type", "rgb"),
+            ("CameraHelper_d405r.inputs:topicName", "/d405_right/image_raw"),
+            ("CameraHelper_d405r.inputs:frameId", "CameraRightArm"),
+        ],
+        keys.CONNECT: [
+            ("OnPlaybackTick.outputs:tick", "CreateRenderProduct_d405r.inputs:execIn"),
+            ("OnPlaybackTick.outputs:tick", "CameraHelper_d405r.inputs:execIn"),
+            ("CreateRenderProduct_d405r.outputs:renderProductPath", "CameraHelper_d405r.inputs:renderProductPath"),
+        ],
+    },
+)
+```
 
 ### 커널 업데이트 후 GPU 인식 안 됨
 ```

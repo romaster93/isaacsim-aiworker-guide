@@ -6,6 +6,8 @@ services:
     stdin_open: true
     tty: true
     network_mode: host
+    ipc: host                    # MIT-SHM X11 프리징 방지
+    shm_size: '2gb'              # GPU 공유 메모리 부족 방지 (기본 64MB → 2GB)
     deploy:
       resources:
         reservations:
@@ -17,6 +19,7 @@ services:
       - ACCEPT_EULA=Y
       - PRIVACY_CONSENT=Y
       - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1        # Qt MIT-SHM 비활성화 (Docker GUI 안정성)
     volumes:
       # IsaacSim 캐시 (성능 향상 - 재시작 시 로딩 빨라짐)
       - isaac-cache:/isaac-sim/.cache:rw
