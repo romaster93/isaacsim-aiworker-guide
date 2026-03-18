@@ -44,10 +44,10 @@ class IsaacSimJointController(Node):
         positions = {name: 0.0 for name in msg.name}
 
         # 1. 팔 관절: 진폭 15도, 0.5Hz
-        arm_amp = 15.0
+        arm_amp_rad = math.radians(15.0)
         arm_freq = 0.5
-        arm_val1 = arm_amp * math.sin(2.0 * math.pi * arm_freq * t)
-        arm_val2 = -arm_amp * math.sin(2.0 * math.pi * arm_freq * t)
+        arm_val1 = arm_amp_rad * math.sin(2.0 * math.pi * arm_freq * t)
+        arm_val2 = -arm_amp_rad * math.sin(2.0 * math.pi * arm_freq * t)
         positions['arm_l_joint1'] = arm_val1
         positions['arm_r_joint1'] = arm_val2
 
@@ -75,7 +75,7 @@ class IsaacSimJointController(Node):
         grip_r_val = grip_r_center + grip_r_amp * math.sin(
             2.0 * math.pi * grip_r_freq * t
         )
-        positions['gripper_r_joint2'] = grip_r_val
+        positions['gripper_r_joint1'] = math.radians(grip_r_val)
 
         # position 배열 생성
         msg.position = [positions[name] for name in msg.name]
