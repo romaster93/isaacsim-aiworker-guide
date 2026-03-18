@@ -77,6 +77,23 @@ TF Publisher를 생성한 직후에는 **URDF 링크만** TF에 나옵니다.
 > URDF 임포트 시 Articulation Root는 `ffw_sg2_follower` 자체가 아니라
 > **ffw_sg2_follower > world** 에 있습니다.
 
+**Stage 계층 구조 (Moveable Base 임포트 시):**
+
+IsaacSim Stage 패널에서는 `world`와 `base_link`가 **같은 레벨(siblings)**로 나타납니다:
+```
+ffw_sg2_follower
+├── world           ← Articulation Root가 여기에 있음
+├── base_link       ← world와 같은 레벨 (URDF에서는 world의 자식이지만 임포트 시 평탄화됨)
+│   ├── head_link1
+│   ├── arm_base_link
+│   ├── left_wheel_steer
+│   └── ...
+```
+
+> **URDF vs Stage 차이**: URDF에서는 `world` → `base_link` (부모-자식)이지만,
+> Moveable Base로 임포트하면 IsaacSim이 floating joint를 생성하면서 계층이 평탄화됩니다.
+> TF 발행은 URDF의 관절 관계를 따르므로, TF 트리에서는 여전히 `world → base_link`로 나타납니다.
+
 **Articulation Root 확인 방법:**
 1. Stage에서 `ffw_sg2_follower > world` 클릭
 2. Property에 **Articulation Root** 항목이 있으면 이것이 실제 Articulation Root
@@ -173,6 +190,22 @@ ROS2 Publish Transform Tree 노드 → Property → **targetPrims**에서 **+ Ad
 > `head_link2 > ZED_X_Mini > base_link > ZED_X_Mini > CameraLeft`
 > 가장 하위의 **CameraLeft**를 선택해야 합니다.
 
+### D405 팔 카메라 (URDF 포함 — 자동 TF)
+
+FFW-SG2에는 양쪽 팔 끝(arm_l_link7, arm_r_link7)에 **Intel RealSense D405** 카메라가 장착되어 있습니다.
+이 카메라는 URDF에 fixed joint로 정의되어 있으므로 **targetPrims에 별도 추가할 필요 없이** articulation root(`ffw_sg2_follower > world`)를 통해 **자동으로 TF에 포함**됩니다.
+
+TF 체인:
+```
+arm_l_link7 → camera_l_bottom_screw_frame → camera_l_link   (왼팔 D405)
+arm_r_link7 → camera_r_bottom_screw_frame → camera_r_link   (오른팔 D405)
+```
+
+> **D405로 ROS2 카메라 토픽을 발행하는 경우**: frameId를 `camera_l_link` 또는 `camera_r_link`로 설정하세요.
+> 단, URDF에는 D405의 optical frame이 별도로 정의되어 있지 않습니다.
+> depth/RGB 데이터를 RViz2에서 올바른 방향으로 보려면 IsaacSim 카메라 prim을 추가로 targetPrims에 넣거나,
+> static transform publisher로 optical frame을 수동 발행해야 할 수 있습니다.
+
 ### 센서 frameId 수정
 
 targetPrims에 센서를 추가한 후, 각 센서의 ROS2 발행 노드에서 **frameId를 실제 TF frame 이름과 일치**시켜야 합니다.
@@ -182,6 +215,8 @@ targetPrims에 센서를 추가한 후, 각 센서의 ROS2 발행 노드에서 *
 | Zed X Mini (depth_pcl) | ROS2 Camera Helper | `zed_mini_left` | **`CameraLeft`** |
 | Zed X Mini (depth) | ROS2 Camera Helper | `zed_mini_left` | **`CameraLeft`** |
 | Zed X Mini (camera_info) | ROS2 Camera Info Helper | `zed_mini_left` | **`CameraLeft`** |
+| D405 왼팔 | ROS2 Camera Helper | (설정 필요) | **`camera_l_link`** |
+| D405 오른팔 | ROS2 Camera Helper | (설정 필요) | **`camera_r_link`** |
 | IMU | ROS2 Publish Imu | `base_link` | `base_link` (변경 없음) |
 | 2D LiDAR Left | (RTX Lidar 자동 생성) | `lidar_2d_left` | **`base_link`** |
 | 2D LiDAR Right | (RTX Lidar 자동 생성) | `lidar_2d_right` | **`base_link`** |
@@ -234,8 +269,8 @@ World (고정)
         ├── head_link1 → head_link2 → ZED_X_Mini → ... → CameraLeft
         ├── lift_link
         ├── arm_base_link
-        ├── arm_r_link1~7 → camera_r_link, gripper_r_...
-        ├── arm_l_link1~7 → camera_l_link, gripper_l_...
+        ├── arm_r_link1~7 → camera_r_bottom_screw_frame → camera_r_link (D405), gripper_r_...
+        ├── arm_l_link1~7 → camera_l_bottom_screw_frame → camera_l_link (D405), gripper_l_...
         ├── left_wheel_steer_link → left_wheel_drive_link
         ├── right_wheel_steer_link → right_wheel_drive_link
         ├── rear_wheel_steer_link → rear_wheel_drive_link
