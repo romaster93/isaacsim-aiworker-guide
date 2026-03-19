@@ -60,7 +60,7 @@ Nav2를 돌리려면 로봇이 이 토픽/TF를 제공해야 합니다:
 | 필요 요소 | 토픽/TF | 현재 상태 | 해결 방법 |
 |-----------|---------|-----------|-----------|
 | Odometry | `/odom` + `odom → base_link` TF | **없음** | `nav2_bridge.py`로 해결 |
-| LiDAR | `/scan` (LaserScan) | `/laser_scan_left` 있음 | `topic_tools relay`로 해결 |
+| LiDAR | `/scan` (LaserScan) | `/laser_scan_left`, `/laser_scan_right` 있음 | `laser_merger.py`로 해결 |
 | TF Tree | `base_link → 센서/링크` | **완료** (Step 4) | — |
 | Map → Odom | `map → odom` TF | — | AMCL/SLAM이 자동 발행 |
 
@@ -77,15 +77,19 @@ AMCL  Bridge  IsaacSim TF    IsaacSim TF
 우리의 구현:
 
 ```
-map → odom → world → base_link → head_link1 → ...
- ↑      ↑       ↑         ↑
-AMCL  static  static   IsaacSim
-      (bridge) (bridge) TF Publisher
+map → odom → World → world → base_link → head_link1 → ...
+ ↑      ↑       ↑       ↑         ↑
+AMCL  static  static  IsaacSim  IsaacSim
+      (bridge) (bridge) TF       TF Publisher
 ```
 
-`nav2_bridge.py`가 `odom → world` 정적 변환을 발행해서,
-IsaacSim의 `world → base_link`과 연결합니다.
-시뮬레이션에서는 `world = odom`이므로 동일 좌표계입니다.
+`nav2_bridge.py`가 `odom → World` 정적 변환을 발행해서,
+IsaacSim의 `World → world → base_link`과 연결합니다.
+시뮬레이션에서는 `World = odom`이므로 동일 좌표계입니다.
+
+> **주의**: IsaacSim은 Stage root로 `World` (대문자 W)를 사용합니다.
+> TF 체인은 `map → odom → World → world → base_link` 순서입니다.
+> `world` (소문자)는 IsaacSim 내부 TF이며, `World` (대문자)는 Stage root입니다.
 
 ---
 
@@ -128,8 +132,16 @@ Nav2에게는 "로봇이 지금 어디에 있는지" (`/odom`)도 알려줘야 �
 > **TF에서 위치를 읽어서** `/odom`으로 발행하는 방식을 사용합니다.
 
 `scripts/nav2_bridge.py`가 하는 일:
-1. **Static TF 발행**: `odom → world` (동일 좌표계, identity transform)
+1. **Static TF 발행**: `odom → World` (동일 좌표계, identity transform)
 2. **`/odom` 발행**: TF에서 `odom → base_link` 위치를 읽어서 `nav_msgs/Odometry` 메시지로 변환
+
+nav2_bridge.py 실행 후 기대 출력:
+
+```
+[INFO] [nav2_bridge]: Nav2 Bridge started
+  - Static TF: odom → World (identity)
+  - Publishing: /odom (nav_msgs/Odometry) @ 50Hz
+```
 
 > **대안: Action Graph로 Odometry 발행**
 >
@@ -148,15 +160,15 @@ Step 3에서 2D LiDAR를 설정했습니다:
 - 왼쪽: `/laser_scan_left`
 - 오른쪽: `/laser_scan_right`
 
-Nav2는 **`/scan`** 토픽을 기대합니다. 간단히 relay합니다:
+Nav2는 **`/scan`** 토픽을 기대합니다. `laser_merger.py`로 양쪽 LiDAR를 합쳐서 발행합니다:
 
 ```bash
-# 왼쪽 LiDAR를 /scan으로 relay
-ros2 run topic_tools relay /laser_scan_left /scan
+# 양쪽 LiDAR를 합쳐서 /scan으로 발행
+python3 ~/ms_AIworker/scripts/laser_merger.py
 ```
 
 > **참고**: ROBOTIS 실제 로봇은 `dual_laser_merger` 패키지로 양쪽 LiDAR를 병합합니다.
-> IsaacSim에서도 가능하지만, 한쪽만 사용해도 SLAM/Navigation은 동작합니다.
+> `laser_merger.py`는 이와 동일한 역할을 합니다.
 
 ### 3.3 전체 실행 순서
 
@@ -173,7 +185,7 @@ source ~/ms_AIworker/scripts/ros2-bridge-env.sh
 | **1** | IsaacSim | `conda activate isaac_sim && isaacsim` → Play |
 | **2** | Swerve Controller | `python3 ~/ms_AIworker/scripts/swerve_controller.py` |
 | **3** | Nav2 Bridge | `python3 ~/ms_AIworker/scripts/nav2_bridge.py` |
-| **4** | LiDAR Relay | `ros2 run topic_tools relay /laser_scan_left /scan` |
+| **4** | LiDAR Merger | `python3 ~/ms_AIworker/scripts/laser_merger.py` |
 
 > **동작 확인** (새 터미널에서):
 > ```bash
@@ -183,7 +195,7 @@ source ~/ms_AIworker/scripts/ros2-bridge-env.sh
 > # scan 토픽 확인
 > ros2 topic echo /scan --once
 >
-> # TF 트리 확인 (odom → world → base_link 체인이 보여야 함)
+> # TF 트리 확인 (odom → World → world → base_link 체인이 보여야 함)
 > ros2 run tf2_tools view_frames
 > ```
 
@@ -218,14 +230,26 @@ ros2 launch slam_toolbox online_sync_launch.py \
   use_sim_time:=true
 ```
 
+SLAM Toolbox 정상 시작 시 아래와 같은 로그가 나옵니다:
+
+```
+[slam_toolbox]: Using solver plugin solver_plugins::CeresSolver
+[slam_toolbox]: Loaded params from ...slam_params.yaml
+[slam_toolbox]: Message Filter dropping message: frame 'base_link' ...
+(첫 스캔 수신 후 사라짐)
+[slam_toolbox]: Registering sensor: [Custom Described Lidar]
+```
+
 **터미널 6 — RViz 실행:**
 
 ```bash
 conda deactivate
 source ~/ms_AIworker/scripts/ros2-bridge-env.sh
 
-rviz2
+rviz2 --ros-args -p use_sim_time:=true
 ```
+
+> **주의**: `use_sim_time` 없이 RViz를 실행하면 TF 타이밍 에러가 발생합니다.
 
 ### 4.3 RViz 설정
 
@@ -268,6 +292,11 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard
 RViz에서 지도가 실시간으로 확장되는 것을 확인하세요.
 환경의 모든 영역을 돌아다니면 완전한 지도가 만들어집니다.
 
+> **매핑 팁**:
+> - **천천히 이동** 권장 — 너무 빠르면 스캔 매칭이 실패하여 지도가 틀어집니다
+> - RViz에서 지도가 이중으로 보이면 속도를 낮추세요 (`z`키로 감속)
+> - 모든 벽/모서리가 선명하게 보이면 충분히 매핑된 것입니다
+
 ### 4.5 지도 저장
 
 매핑이 완료되면 지도를 저장합니다:
@@ -277,7 +306,14 @@ RViz에서 지도가 실시간으로 확장되는 것을 확인하세요.
 mkdir -p ~/ms_AIworker/maps
 
 # 지도 저장 (map.yaml + map.pgm 생성)
-ros2 run nav2_map_server map_saver_cli -f ~/ms_AIworker/maps/map
+ros2 run nav2_map_server map_saver_cli -f ~/ms_AIworker/maps/map --ros-args -p use_sim_time:=true
+```
+
+지도 저장 성공 시 기대 출력:
+
+```
+[map_saver_cli]: Saving map to ~/ms_AIworker/maps/map
+[map_saver_cli]: Map saved successfully
 ```
 
 생성되는 파일:
@@ -296,22 +332,37 @@ ros2 run nav2_map_server map_saver_cli -f ~/ms_AIworker/maps/map
 
 ### 5.1 Nav2 실행
 
-터미널 1~4 (IsaacSim, swerve_controller, nav2_bridge, LiDAR relay)는 계속 실행 중입니다.
+터미널 1~4 (IsaacSim, swerve_controller, nav2_bridge, laser_merger)는 계속 실행 중입니다.
 SLAM은 종료하고, 대신 Nav2를 실행합니다.
 
-**터미널 5 — Nav2 + AMCL 실행:**
+> **왜 두 개로 분리하나요?**
+> `bringup_launch.py`는 `docking_server` 등 불필요한 노드를 포함해서 설정 오류가 발생할 수 있습니다.
+> localization과 navigation을 분리 실행하면 필요한 노드만 올라옵니다.
+
+**터미널 5A — Localization (AMCL) 실행:**
 
 ```bash
 conda deactivate
 source ~/ms_AIworker/scripts/ros2-bridge-env.sh
 
-ros2 launch nav2_bringup bringup_launch.py \
+ros2 launch nav2_bringup localization_launch.py \
   use_sim_time:=true \
   map:=$HOME/ms_AIworker/maps/map.yaml \
   params_file:=$HOME/ms_AIworker/config/nav2_params.yaml
 ```
 
-> Nav2가 정상적으로 시작되면 `[lifecycle_manager]: Managed nodes are active` 메시지가 나옵니다.
+**터미널 5B — Navigation 실행:**
+
+```bash
+conda deactivate
+source ~/ms_AIworker/scripts/ros2-bridge-env.sh
+
+ros2 launch nav2_bringup navigation_launch.py \
+  use_sim_time:=true \
+  params_file:=$HOME/ms_AIworker/config/nav2_params.yaml
+```
+
+> Nav2가 정상적으로 시작되면 각 터미널에서 `[lifecycle_manager]: Managed nodes are active` 메시지가 나옵니다.
 > 이 메시지가 나올 때까지 기다리세요 (10~30초 소요).
 
 **터미널 6 — RViz 실행:**
@@ -320,8 +371,10 @@ ros2 launch nav2_bringup bringup_launch.py \
 conda deactivate
 source ~/ms_AIworker/scripts/ros2-bridge-env.sh
 
-rviz2
+rviz2 --ros-args -p use_sim_time:=true
 ```
+
+> **주의**: `use_sim_time` 없이 RViz를 실행하면 TF 타이밍 에러가 발생합니다.
 
 ### 5.2 RViz에서 Nav2 설정
 
@@ -342,13 +395,17 @@ AMCL은 로봇의 초기 위치를 알아야 합니다.
 2. 지도 위에서 로봇의 **현재 위치를 클릭** → **방향으로 드래그**
 3. AMCL 파티클이 수렴하면 위치 추정 완료
 
-> 시뮬레이션에서는 로봇이 항상 원점(0,0)에서 시작하므로,
-> `nav2_params.yaml`의 `initial_pose`를 `(0, 0, 0)`으로 설정해두었습니다.
-> `set_initial_pose: true`이므로 자동으로 초기 위치가 설정됩니다.
+> **initial_pose는 IsaacSim에서 로봇의 시작 위치와 맞아야 합니다.**
+> 로봇의 실제 시작 위치를 확인하려면:
+> ```bash
+> ros2 topic echo /odom --once --field pose.pose.position
+> ```
+> `nav2_params.yaml`의 `initial_pose`가 이 값과 다르면 지도에서 로봇 위치가 틀어집니다.
+> 확인 후 `set_initial_pose: true`이면 자동으로 초기 위치가 설정됩니다.
 
 ### 5.4 목표 지점 설정 및 자율 이동
 
-1. RViz 상단 메뉴에서 **`Nav2 Goal`** (또는 `2D Goal Pose`) 클릭
+1. RViz 상단 툴바에서 **`2D Goal Pose`** 클릭
 2. 지도 위에서 **목표 위치를 클릭** → **목표 방향으로 드래그**
 3. Nav2가 자동으로:
    - 경로 계획 (초록색 선)
@@ -357,7 +414,7 @@ AMCL은 로봇의 초기 위치를 알아야 합니다.
    - 목표 도달 시 정지
 
 ```
-[Nav2 Goal 클릭]
+[2D Goal Pose 클릭] (RViz2 상단 툴바)
      ↓
 Nav2 Planner → 경로 계획 (/plan)
      ↓
@@ -377,20 +434,19 @@ Nav2 → 경로 추종 반복...
 지도 없이 바로 자율 주행을 시작할 수도 있습니다 (탐색하면서 지도를 만들며 이동):
 
 ```bash
-# SLAM + Nav2 동시 실행 (ROBOTIS 방식)
-# 터미널 5:
+# 터미널 5: SLAM Toolbox (map → odom TF를 제공)
 ros2 launch slam_toolbox online_sync_launch.py \
   slam_params_file:=$HOME/ms_AIworker/config/slam_params.yaml \
   use_sim_time:=true
 
-# 터미널 8:
+# 터미널 8: Navigation만 실행 (localization_launch.py는 사용하지 않음)
 ros2 launch nav2_bringup navigation_launch.py \
   use_sim_time:=true \
   params_file:=$HOME/ms_AIworker/config/nav2_params.yaml
 ```
 
-> `navigation_launch.py`는 localization 없이 navigation만 실행합니다.
-> SLAM Toolbox가 `map → odom` TF를 제공하므로 AMCL이 필요 없습니다.
+> `navigation_launch.py`만 사용합니다. `localization_launch.py`는 쓰지 않습니다.
+> SLAM Toolbox가 `map → odom` TF를 직접 제공하므로 AMCL이 필요 없습니다.
 
 ---
 
@@ -432,10 +488,10 @@ ros2 launch nav2_bringup navigation_launch.py \
 ### /odom 토픽이 발행되지 않음
 
 ```bash
-# TF 확인 — world → base_link 변환이 있는지
+# TF 확인 — World → world → base_link 변환이 있는지
 ros2 run tf2_tools view_frames
 
-# 결과 PDF에서 world → base_link 경로가 있어야 함
+# 결과 PDF에서 World → world → base_link 경로가 있어야 함
 # 없으면: IsaacSim Play + Step 4 TF publisher 확인
 ```
 
@@ -450,9 +506,9 @@ ros2 run tf2_tools view_frames
 ros2 topic list | grep -i scan
 ros2 topic list | grep -i laser
 
-# relay가 실행 중인지 확인
-# /laser_scan_left 또는 /laser_scan_right가 있으면 relay 실행
-ros2 run topic_tools relay /laser_scan_left /scan
+# laser_merger.py가 실행 중인지 확인
+# /laser_scan_left 또는 /laser_scan_right가 있으면 laser_merger.py 실행
+python3 ~/ms_AIworker/scripts/laser_merger.py
 ```
 
 - Step 3에서 LiDAR를 설정했는지 확인
@@ -464,7 +520,7 @@ ros2 run topic_tools relay /laser_scan_left /scan
   - 0Hz면 LiDAR가 동작하지 않는 것
 - `/odom`이 업데이트되는지 확인: `ros2 topic hz /odom`
 - TF tree가 완성되었는지 확인: `ros2 run tf2_tools view_frames`
-  - `map → odom → world → base_link` 체인이 있어야 함
+  - `map → odom → World → world → base_link` 체인이 있어야 함
 - 로봇이 실제로 **이동**해야 SLAM이 새 스캔을 추가합니다 (제자리에서는 지도가 안 늘어남)
 
 ### Nav2가 시작하자마자 에러
@@ -492,19 +548,20 @@ ros2 run topic_tools relay /laser_scan_left /scan
 | LiDAR 점이 안 보임 | Reliability Policy → **Best Effort** |
 | Fixed Frame 에러 | Fixed Frame → **map** (또는 **odom**) |
 | 모든 것이 원점에 겹침 | TF tree 확인 — 빠진 변환이 있을 수 있음 |
+| TF 타이밍 에러 | RViz 실행 시 `--ros-args -p use_sim_time:=true` 추가 |
 
 ### 실제 ROBOTIS와의 차이점
 
 | 항목 | 실제 로봇 | IsaacSim |
 |------|----------|----------|
 | Odometry | swerve_drive_controller (ros2_control) | nav2_bridge.py (TF 기반) |
-| LiDAR | dual_laser_merger → /scan | topic_tools relay → /scan |
+| LiDAR | dual_laser_merger → /scan | laser_merger.py → /scan |
 | 제어 | ros2_control + hardware interface | swerve_controller.py → Action Graph |
 | TF 발행 | robot_state_publisher + ros2_control | IsaacSim ROS2 Publish Transform Tree |
 | 시간 | 실시간 (wall clock) | 시뮬레이션 시간 (use_sim_time: true) |
 
 ---
 
-**Status**: PENDING — Nav2 패키지 설치 및 실제 테스트 필요
+**Status**: VERIFIED — SLAM 매핑 및 Nav2 자율 주행 동작 확인
 **이전**: [Step 6: Swerve Drive](06-swerve-drive.md)
 **다음**: (완료 후 추가 예정)

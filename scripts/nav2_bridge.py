@@ -58,17 +58,16 @@ class Nav2Bridge(Node):
 
         self.get_logger().info(
             'Nav2 Bridge started\n'
-            '  - Static TF: odom → world (identity)\n'
+            '  - Static TF: odom → World (identity)\n'
             '  - Publishing: /odom (nav_msgs/Odometry) @ 50Hz'
         )
 
     def _publish_static_tf(self):
-        """odom → world 정적 변환 발행 (동일 좌표계)"""
+        """odom → World 정적 변환 발행 (동일 좌표계)"""
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id = 'odom'
-        t.child_frame_id = 'world'
-        # identity transform (위치 0,0,0 / 회전 없음)
+        t.child_frame_id = 'World'
         t.transform.rotation.w = 1.0
         self.static_broadcaster.sendTransform(t)
 
