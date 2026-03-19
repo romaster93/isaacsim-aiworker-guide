@@ -59,7 +59,7 @@ Nav2를 돌리려면 로봇이 이 토픽/TF를 제공해야 합니다:
 
 | 필요 요소 | 토픽/TF | 현재 상태 | 해결 방법 |
 |-----------|---------|-----------|-----------|
-| Odometry | `/odom` + `odom → base_link` TF | **없음** | `nav2_bridge.py`로 해결 |
+| Odometry | `/odom` + `odom → base_link` TF | **없음** | `swerve_controller.py`(odometry) + `nav2_bridge.py`(TF)로 해결 |
 | LiDAR | `/scan` (LaserScan) | `/laser_scan_left`, `/laser_scan_right` 있음 | `laser_merger.py`로 해결 |
 | TF Tree | `base_link → 센서/링크` | **완료** (Step 4) | — |
 | Map → Odom | `map → odom` TF | — | AMCL/SLAM이 자동 발행 |
@@ -103,8 +103,7 @@ conda deactivate
 sudo apt install -y \
   ros-jazzy-navigation2 \
   ros-jazzy-nav2-bringup \
-  ros-jazzy-slam-toolbox \
-  ros-jazzy-topic-tools
+  ros-jazzy-slam-toolbox
 
 # tf2 관련 (nav2_bridge.py에서 사용)
 sudo apt install -y \
@@ -121,32 +120,68 @@ sudo apt install -y \
 IsaacSim은 게임 엔진 기반이고, Nav2는 ROS2 기반입니다.
 둘을 연결하려면 **3가지를 브릿지**해야 합니다.
 
-### 3.1 Odometry 브릿지 (nav2_bridge.py)
+### 3.0 Joint State Publisher 설정 (IsaacSim)
 
-Step 6에서 `swerve_controller.py`는 `/cmd_vel` → 바퀴 명령만 처리합니다.
-Nav2에게는 "로봇이 지금 어디에 있는지" (`/odom`)도 알려줘야 합니다.
+`swerve_controller.py`의 FK odometry는 `/joint_states` 토픽이 필요합니다.
+IsaacSim에서 Joint State Publisher를 추가합니다:
 
-> **ROBOTIS 실제 로봇에서는**: `ffw_swerve_drive_controller`(C++ ros2_control 플러그인)가
-> 바퀴 엔코더로 odometry를 계산합니다.
-> IsaacSim에서는 시뮬레이션이 로봇 위치를 정확히 알고 있으므로,
-> **TF에서 위치를 읽어서** `/odom`으로 발행하는 방식을 사용합니다.
+1. `Tools` → `Robotics` → `ROS2 OmniGraphs` → **ros jointstate** 선택
+2. **Publisher만 체크** (Subscriber는 체크 해제)
+3. Articulation Root: `/ffw_sg2_follower` 하위의 **`world`** prim 선택
+4. OK 클릭
+
+> **Articulation이란?** 관절로 연결된 물리 바디들의 묶음입니다.
+> Articulation Root는 "이 prim 아래 모든 joint/link를 하나의 로봇으로 취급하라"는 표시입니다.
+> FFW-SG2에서는 `world` prim이 Articulation Root입니다.
+
+동작 확인 (Play 후):
+```bash
+ros2 topic echo /joint_states --once --field name
+```
+바퀴 joint 이름(`left_wheel_steer`, `left_wheel_drive` 등)이 나오면 성공입니다.
+
+### 3.1 Odometry + TF 브릿지
+
+Step 6에서 `swerve_controller.py`는 `/cmd_vel` → 바퀴 명령(IK)과 `/joint_states` → `/odom`(FK) 두 가지를 처리합니다.
+`nav2_bridge.py`는 Nav2 TF 체인을 완성하는 정적 변환만 발행합니다.
 
 `scripts/nav2_bridge.py`가 하는 일:
-1. **Static TF 발행**: `odom → World` (동일 좌표계, identity transform)
-2. **`/odom` 발행**: TF에서 `odom → base_link` 위치를 읽어서 `nav_msgs/Odometry` 메시지로 변환
+- **Static TF 발행**: `odom → World` (동일 좌표계, identity transform)
+- IsaacSim의 `World → world → base_link` TF와 연결하여 Nav2가 이해하는 TF 체인 완성
+
+`scripts/swerve_controller.py`가 하는 일:
+- **IK (역운동학)**: `/cmd_vel` → `/isaac_sim/joint_commands` (바퀴 제어)
+- **FK (정운동학)**: `/joint_states` → `/odom` (엔코더 기반 odometry 발행)
+
+> **FK Odometry란?**
+> 역운동학(IK)의 반대입니다. IK는 "로봇 속도 → 바퀴 명령"이고,
+> FK는 "바퀴 상태 → 로봇 속도"입니다.
+> 각 바퀴의 steer 각도와 drive 각속도를 읽어서
+> 최소제곱법(SVD)으로 로봇의 속도(vx, vy, ω)를 추정합니다.
+> ROBOTIS `ffw_swerve_drive_controller`의 `odometry.cpp`와 동일한 방식입니다.
+>
+> 실제 로봇처럼 엔코더 기반 odometry이므로 시간이 지나면 **드리프트**가 발생합니다.
+> 이 드리프트를 AMCL이 LiDAR 스캔으로 보정합니다 (sim-to-real).
 
 nav2_bridge.py 실행 후 기대 출력:
 
 ```
 [INFO] [nav2_bridge]: Nav2 Bridge started
   - Static TF: odom → World (identity)
-  - Publishing: /odom (nav_msgs/Odometry) @ 50Hz
+```
+
+swerve_controller.py 실행 후 기대 출력:
+
+```
+[INFO] [swerve_controller]: Swerve Drive Controller started
+  - IK: /cmd_vel → /isaac_sim/joint_commands
+  - FK: /joint_states → /odom (encoder-based odometry)
 ```
 
 > **대안: Action Graph로 Odometry 발행**
 >
 > IsaacSim 5.1.0에는 `Isaac Compute Odometry` + `ROS2 Publish Odometry` OmniGraph 노드가 있습니다.
-> 이 노드들을 Action Graph에 추가하면 `nav2_bridge.py` 없이도 `/odom`을 발행할 수 있습니다.
+> 이 노드들을 Action Graph에 추가하면 `swerve_controller.py`의 FK odometry를 대체하여 `/odom`을 발행할 수 있습니다.
 > 단, Action Graph GUI 프리징 이슈가 있어서 (Step 5 참고) 이 가이드에서는 Python 스크립트 방식을 사용합니다.
 >
 > Action Graph 방식이 궁금하다면:
@@ -183,8 +218,8 @@ source ~/ms_AIworker/scripts/ros2-bridge-env.sh
 | 터미널 | 실행 내용 | 명령어 |
 |--------|----------|--------|
 | **1** | IsaacSim | `conda activate isaac_sim && isaacsim` → Play |
-| **2** | Swerve Controller | `python3 ~/ms_AIworker/scripts/swerve_controller.py` |
-| **3** | Nav2 Bridge | `python3 ~/ms_AIworker/scripts/nav2_bridge.py` |
+| **2** | Swerve Controller + Odometry | `python3 ~/ms_AIworker/scripts/swerve_controller.py` |
+| **3** | Nav2 TF Bridge | `python3 ~/ms_AIworker/scripts/nav2_bridge.py` |
 | **4** | LiDAR Merger | `python3 ~/ms_AIworker/scripts/laser_merger.py` |
 
 > **동작 확인** (새 터미널에서):
@@ -424,7 +459,7 @@ swerve_controller.py → 바퀴 명령
      ↓
 IsaacSim → 로봇 이동
      ↓
-nav2_bridge.py → /odom 업데이트
+swerve_controller.py → /joint_states 읽기 → /odom 업데이트 (FK)
      ↓
 Nav2 → 경로 추종 반복...
 ```
@@ -497,7 +532,9 @@ ros2 run tf2_tools view_frames
 
 - IsaacSim이 **Play 상태**인지 확인
 - Step 4의 TF Publisher Action Graph가 정상 동작하는지 확인
-- `nav2_bridge.py`가 실행 중인지 확인
+- `swerve_controller.py`가 실행 중인지 확인
+- `/joint_states` 토픽이 발행되는지 확인: `ros2 topic hz /joint_states`
+- Joint State Publisher가 IsaacSim에서 설정되었는지 확인 (섹션 3.0 참고)
 
 ### /scan 토픽이 없음
 
@@ -554,7 +591,7 @@ python3 ~/ms_AIworker/scripts/laser_merger.py
 
 | 항목 | 실제 로봇 | IsaacSim |
 |------|----------|----------|
-| Odometry | swerve_drive_controller (ros2_control) | nav2_bridge.py (TF 기반) |
+| Odometry | swerve_drive_controller (ros2_control) | swerve_controller.py (FK 기반, 동일 방식) |
 | LiDAR | dual_laser_merger → /scan | laser_merger.py → /scan |
 | 제어 | ros2_control + hardware interface | swerve_controller.py → Action Graph |
 | TF 발행 | robot_state_publisher + ros2_control | IsaacSim ROS2 Publish Transform Tree |

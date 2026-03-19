@@ -88,6 +88,26 @@ URDF 임포트 전에 빈 Stage를 생성합니다:
    - Collider: 각 링크에 Convex Hull 충돌체 적용됨
    - 질량/관성: URDF에 정의된 값 사용 (Default Density 0.0이므로)
 
+4. **Articulation 구조**
+   - URDF 임포트 시 로봇은 하나의 **Articulation**(관절 연결체)으로 자동 생성됨
+   - **Articulation이란?** 관절(joint)로 연결된 물리 바디(link)들의 묶음. 물리 엔진이 이 묶음을 하나의 로봇으로 인식하여 효율적으로 계산
+   - **Articulation Root**: "이 prim부터 아래 모든 joint/link를 하나의 로봇으로 취급하라"는 표시
+   - Stage에서 `ffw_sg2_follower` → `world` prim을 선택하면 Properties에서 `Articulation Root` 체크 확인 가능
+   - Articulation Root가 없으면 각 링크가 독립적인 물리 바디로 취급되어 로봇이 분해됨
+
+5. **Stage 구조 확인**
+   - URDF 임포트(방법 A) 시 Stage 구조:
+     ```
+     /World              ← Stage root (환경, 조명)
+     /ffw_sg2_follower   ← 로봇 (defaultPrim, root 레벨)
+       /world            ← Articulation Root
+         /base_link      ← 로봇 베이스
+           /arm_l_link1~7, /arm_r_link1~7, /head_link1~2, ...
+     /GroundPlane        ← 바닥
+     ```
+   - `/ffw_sg2_follower`는 `/World` 하위가 **아님** — root 레벨에 나란히 존재
+   - 이후 Step에서 prim 경로를 참조할 때 `/ffw_sg2_follower/world/base_link` 형태로 사용
+
 ---
 
 ## 방법 B: 사전 구성된 USD 파일 사용

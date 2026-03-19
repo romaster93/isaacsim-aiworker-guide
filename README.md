@@ -30,6 +30,9 @@ NVIDIA IsaacSim 5.1.0 환경에서 **ROBOTIS FFW-SG2 Mobility AI Worker** 로봇
 | [02. Import URDF](guides/02-import-urdf.md) | FFW-SG2 URDF 임포트, Stage 설정, Physics 구성 | Completed |
 | [03. Import Sensors](guides/03-import-sensors.md) | 카메라, LiDAR, IMU 센서 추가 및 ROS2 연동 | Completed |
 | [04. Publish TF Tree](guides/04-publish-tf.md) | ROS2 TF 트리 발행 (커스텀) | Completed |
+| [05. Control Humanoids](guides/05-control-humanoids.md) | ROS2 JointState로 관절 제어 | Completed |
+| [06. Swerve Drive](guides/06-swerve-drive.md) | /cmd_vel → swerve IK → 바퀴 제어 | Completed |
+| [07. Navigation System](guides/07-navigation-system.md) | Nav2 자율 주행 (SLAM + AMCL + FK Odometry) | Verified |
 | [09. Docker Setup](guides/09-docker-setup.md) | Docker로 IsaacSim 실행 (다른 PC에서 재현) | Completed |
 
 ## Quick Start
@@ -113,6 +116,11 @@ FFW-SG2 Mobility AI Worker
 | `/laser_scan_right` | LaserScan | 2D LiDAR Right |
 | `/point_cloud` | PointCloud2 | Ouster OS1-128 |
 | `/tf` | TFMessage | TF Tree (전체 관절) |
+| `/joint_states` | JointState | 관절 상태 (position/velocity) |
+| `/odom` | Odometry | FK 기반 odometry |
+| `/scan` | LaserScan | 병합된 2D LiDAR (left+right) |
+| `/isaac_sim/joint_commands` | JointState | 관절 제어 명령 |
+| `/cmd_vel` | Twist | 로봇 이동 명령 (Nav2 → swerve) |
 
 ## Project Structure
 
@@ -122,7 +130,15 @@ isaacsim-aiworker-guide/
 ├── docker-compose.yml          # 컨테이너 실행 설정
 ├── fastdds.xml                 # FastDDS UDP 설정 (호스트↔컨테이너 통신)
 ├── guides/                     # 단계별 가이드
+├── config/
+│   ├── nav2_params.yaml        # Nav2 설정 (ROBOTIS 기반, sim 적용)
+│   └── slam_params.yaml        # SLAM Toolbox 설정
+├── maps/                       # SLAM으로 생성한 지도
 ├── scripts/
+│   ├── swerve_controller.py    # Swerve IK(제어) + FK(odometry)
+│   ├── nav2_bridge.py          # odom → World static TF
+│   ├── laser_merger.py         # 양쪽 2D LiDAR 병합 → /scan
+│   ├── isaac_sim_control.py    # 전체 관절 정현파 테스트
 │   ├── docker-run.sh           # Docker 원클릭 실행
 │   └── ros2-bridge-env.sh      # 호스트 ROS2 환경 설정 (source로 사용)
 └── isaacsim_ai_worker/
