@@ -434,4 +434,4 @@ follower = PathFollower(path)
 
 ---
 **Status**: PENDING
-**Next**: [Step 7: Navigation System](07-navigation-system.md)
+**Next**: [Step 8: Navigation System](08-navigation-system.md)
