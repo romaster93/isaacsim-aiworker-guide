@@ -252,6 +252,37 @@ Done! 물리 설정 완료
 > Stage 패널에서 바퀴를 직접 찾아 경로를 확인하고, 스크립트의 경로를 수정하세요.
 > 경로 확인법: Stage에서 joint 클릭 → 하단에 표시되는 `/ffw_sg2_follower/...` 경로 복사
 
+### 2.5 바퀴 충돌 메쉬 설정 (SDF Mesh)
+
+URDF 임포트 시 바퀴의 collision mesh는 기본적으로 **Convex Decomposition**으로 설정됩니다.
+볼록 껍질 근사이므로 바퀴가 울퉁불퉁하게 굴러가는 현상이 발생합니다.
+
+**SDF Mesh**로 변경하면 원본 메쉬 형상 그대로 충돌 판정하여 매끄럽게 굴러갑니다.
+
+**설정 방법 (3개 바퀴 모두):**
+
+1. Instanceable이 체크되어 있으면 **체크 해제** (개별 수정을 위해)
+2. Stage에서 drive wheel의 collision mesh prim 선택:
+   - `rear_wheel_drive_link/collisions/.../node_STL_BINARY_`
+   - `left_wheel_drive_link/collisions/.../node_STL_BINARY_`
+   - `right_wheel_drive_link/collisions/.../node_STL_BINARY_`
+3. Properties → **Collider** → **Approximation** → **SDF Mesh**
+4. **SDF Resolution**: `256` (기본값, 충분히 매끄러움)
+
+> **왜 SDF Mesh인가?**
+>
+> | Approximation | 동적 바디 | 특징 |
+> |---|:---:|---|
+> | Convex Hull | O | 단일 볼록 껍질 — 둥근 바퀴가 다각형처럼 굴러감 |
+> | Convex Decomposition | O | 여러 볼록 껍질 — 개선되지만 여전히 울퉁불퉁 |
+> | Triangle Mesh (`none`) | **X** | 동적 바디에서 Convex Hull로 자동 fallback |
+> | **SDF Mesh** | **O** | **원본 메쉬 수준 충돌 — 가장 매끄러움** |
+>
+> IsaacSim 공식 문서에서는 바퀴에 **실린더 프리미티브**를 권장하지만,
+> SDF Mesh가 원본 형상을 그대로 사용하면서도 매끄러운 결과를 줍니다.
+
+> **주의**: Instanceable을 다시 체크하면 수정이 되돌아갑니다. 체크 해제 상태를 유지하세요.
+
 ---
 
 ## [3] 역운동학 (Inverse Kinematics) 이해

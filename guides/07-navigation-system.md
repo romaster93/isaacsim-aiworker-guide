@@ -23,9 +23,10 @@ Nav2란? ROS2의 표준 자율 주행 프레임워크입니다. 로봇이 **스�
 | [1] 개념 이해 | Nav2가 뭔지, 뭘 필요로 하는지 | 읽기 |
 | [2] 패키지 설치 | Nav2, SLAM Toolbox 설치 | **터미널에서 실행** |
 | [3] 브릿지 설정 | IsaacSim ↔ Nav2 연결 | **터미널에서 실행** |
-| [4] SLAM | 지도 만들기 | **IsaacSim + 터미널** |
+| [4] SLAM | 지도 만들기 (텔레옵 / 자동 매핑) | **IsaacSim + 터미널** |
 | [5] 자율 주행 | 목표점까지 자동 이동 | **IsaacSim + RViz** |
-| [6] 트러블슈팅 | 안 될 때 해결법 | 필요할 때 참고 |
+| [6] 설정 파일 | 파라미터 설명 | 필요할 때 참고 |
+| [7] 트러블슈팅 | 안 될 때 해결법 | 필요할 때 참고 |
 
 ## Prerequisites
 - [x] IsaacSim 5.1.0 설치 (Step 1)
@@ -332,7 +333,109 @@ RViz에서 지도가 실시간으로 확장되는 것을 확인하세요.
 > - RViz에서 지도가 이중으로 보이면 속도를 낮추세요 (`z`키로 감속)
 > - 모든 벽/모서리가 선명하게 보이면 충분히 매핑된 것입니다
 
-### 4.5 지도 저장
+### 4.5 자동 매핑 (Auto Mapping)
+
+텔레옵 대신 **explore_lite**를 사용하면 로봇이 미탐사 영역(frontier)을 자동으로 찾아 이동하며 지도를 만듭니다.
+
+#### explore_lite 설치 (소스 빌드)
+
+Jazzy apt 패키지가 없으므로 소스 빌드합니다:
+
+```bash
+# 워크스페이스 생성 및 소스 클론
+mkdir -p ~/explore_ws/src
+cd ~/explore_ws/src
+git clone https://github.com/robo-friends/m-explore-ros2.git
+
+# explore_lite와 메시지 패키지만 복사
+cp -r m-explore-ros2/explore .
+cp -r m-explore-ros2/explore_lite_msgs .
+rm -rf m-explore-ros2
+
+# 빌드
+cd ~/explore_ws
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install
+```
+
+#### 자동 매핑 실행
+
+터미널 1~4 (IsaacSim, swerve_controller, nav2_bridge, laser_merger)는 실행 중이어야 합니다.
+텔레옵(4.4) 대신 아래 3개를 실행합니다:
+
+**터미널 5 — SLAM Toolbox:**
+
+```bash
+conda deactivate
+source ~/ms_AIworker/scripts/ros2-bridge-env.sh
+
+ros2 launch slam_toolbox online_sync_launch.py \
+  slam_params_file:=$HOME/ms_AIworker/config/slam_params.yaml \
+  use_sim_time:=true
+```
+
+**터미널 6 — Nav2 Navigation:**
+
+```bash
+conda deactivate
+source ~/ms_AIworker/scripts/ros2-bridge-env.sh
+
+ros2 launch nav2_bringup navigation_launch.py \
+  use_sim_time:=true \
+  params_file:=$HOME/ms_AIworker/config/nav2_params.yaml
+```
+
+> `navigation_launch.py`만 사용합니다. SLAM Toolbox가 `map → odom` TF를 제공하므로 AMCL(`localization_launch.py`)은 필요 없습니다.
+
+**터미널 7 — explore_lite:**
+
+```bash
+conda deactivate
+source ~/ms_AIworker/scripts/ros2-bridge-env.sh
+source ~/explore_ws/install/setup.bash
+
+ros2 run explore_lite explore --ros-args \
+  --params-file ~/ms_AIworker/config/explore_params.yaml
+```
+
+**터미널 8 — RViz (확인용):**
+
+```bash
+conda deactivate
+source ~/ms_AIworker/scripts/ros2-bridge-env.sh
+
+rviz2 --ros-args -p use_sim_time:=true
+```
+
+RViz에서 `/map`, `/scan`, `/plan` 외에 frontier 시각화를 추가할 수 있습니다:
+- `Add` → `By topic` → `/explore/frontiers` → `PointCloud2` — 모든 frontier (파란색)
+- `Add` → `By topic` → `/explore/frontiers` 하위의 `MarkerArray` — 현재 목표 frontier (빨간색)
+
+#### RViz에서 보이는 것
+
+| 색상 | 의미 |
+|------|------|
+| **파란색** 포인트 | 감지된 모든 frontier — 미탐사/탐사 영역의 경계 |
+| **빨간색** 마커 | 현재 선택된 목표 frontier — 로봇이 향하는 곳 |
+| **초록색** 경로 | Nav2가 계획한 이동 경로 |
+
+로봇이 빨간 frontier로 이동 → 도착 → 다음 frontier 선택 → 반복하며 지도가 자동으로 확장됩니다.
+모든 frontier가 사라지면 탐색이 완료된 것입니다.
+
+#### explore_params.yaml 주요 파라미터
+
+| 파라미터 | 값 | 설명 |
+|---------|-----|------|
+| `planner_frequency` | 0.33 | frontier 탐색 주기 (Hz) — 3초마다 |
+| `progress_timeout` | 30.0 | 목표까지 진행 없으면 다음 frontier 선택 (초) |
+| `min_frontier_size` | 0.75 | 최소 frontier 크기 (m) — 이보다 작은 frontier 무시 |
+| `potential_scale` | 3.0 | 거리 비용 가중치 — 높을수록 가까운 frontier 선호 |
+| `gain_scale` | 1.0 | frontier 크기 가중치 — 높을수록 큰 frontier 선호 |
+| `return_to_init` | true | 탐색 완료 후 시작 위치로 복귀 |
+
+> 매핑이 완료되면 explore_lite를 Ctrl+C로 종료하고, 아래 4.6에서 지도를 저장합니다.
+
+### 4.6 지도 저장
 
 매핑이 완료되면 지도를 저장합니다:
 
@@ -463,25 +566,6 @@ swerve_controller.py → /joint_states 읽기 → /odom 업데이트 (FK)
      ↓
 Nav2 → 경로 추종 반복...
 ```
-
-### 5.5 SLAM + Navigation 동시 실행
-
-지도 없이 바로 자율 주행을 시작할 수도 있습니다 (탐색하면서 지도를 만들며 이동):
-
-```bash
-# 터미널 5: SLAM Toolbox (map → odom TF를 제공)
-ros2 launch slam_toolbox online_sync_launch.py \
-  slam_params_file:=$HOME/ms_AIworker/config/slam_params.yaml \
-  use_sim_time:=true
-
-# 터미널 8: Navigation만 실행 (localization_launch.py는 사용하지 않음)
-ros2 launch nav2_bringup navigation_launch.py \
-  use_sim_time:=true \
-  params_file:=$HOME/ms_AIworker/config/nav2_params.yaml
-```
-
-> `navigation_launch.py`만 사용합니다. `localization_launch.py`는 쓰지 않습니다.
-> SLAM Toolbox가 `map → odom` TF를 직접 제공하므로 AMCL이 필요 없습니다.
 
 ---
 
