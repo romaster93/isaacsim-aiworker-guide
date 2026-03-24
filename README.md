@@ -32,7 +32,8 @@ NVIDIA IsaacSim 5.1.0 환경에서 **ROBOTIS FFW-SG2 Mobility AI Worker** 로봇
 | [04. Publish TF Tree](guides/04-publish-tf.md) | ROS2 TF 트리 발행 (커스텀) | Completed |
 | [05. Control Humanoids](guides/05-control-humanoids.md) | ROS2 JointState로 관절 제어 | Completed |
 | [06. Swerve Drive](guides/06-swerve-drive.md) | /cmd_vel → swerve IK → 바퀴 제어 | Completed |
-| [07. Navigation System](guides/07-navigation-system.md) | Nav2 자율 주행 (SLAM + AMCL + FK Odometry) | Verified |
+| [07. Navigation System](guides/07-navigation-system.md) | Nav2 자율 주행 (SLAM + AMCL + FK Odometry + Auto Mapping) | Verified |
+| [08. ApexNAV Integration](guides/08-apexnav-integration.md) | ApexNAV 물체 탐색 (VLM + Semantic Frontier Exploration) | Testing |
 | [09. Docker Setup](guides/09-docker-setup.md) | Docker로 IsaacSim 실행 (다른 PC에서 재현) | Completed |
 
 ## Quick Start
