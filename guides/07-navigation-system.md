@@ -670,6 +670,28 @@ python3 ~/ms_AIworker/scripts/laser_merger.py
 | Fixed Frame 에러 | Fixed Frame → **map** (또는 **odom**) |
 | 모든 것이 원점에 겹침 | TF tree 확인 — 빠진 변환이 있을 수 있음 |
 | TF 타이밍 에러 | RViz 실행 시 `--ros-args -p use_sim_time:=true` 추가 |
+| Depth 이미지가 세로 줄무늬/노이즈로 보임 | 아래 **Depth 이미지 표시 문제** 참고 |
+
+### Depth 이미지 표시 문제 (RViz2)
+
+RViz2에서 32FC1 depth 이미지가 **세로 줄무늬 노이즈**로 보이는 경우:
+
+> **원인**: RViz2의 Image display가 32FC1 float depth를 자동 정규화할 때
+> min/max 범위 계산이 실패하는 알려진 버그입니다 ([GitHub #512](https://github.com/ros2/rviz/issues/512)).
+> `rqt_image_view`에서는 정상으로 보이는데 RViz에서만 깨지는 것이 특징입니다.
+
+**해결:**
+
+1. RViz에서 Image display 선택
+2. **Normalize Range** → **체크 해제**
+3. **Min Value** → `0.0`
+4. **Max Value** → `10.0` (depth 카메라 max range에 맞춤)
+
+**확인 방법** — 데이터 자체가 정상인지 확인:
+```bash
+# rqt_image_view로 확인 (이것이 정상이면 데이터는 문제 없음)
+ros2 run rqt_image_view rqt_image_view /zed_mini/depth
+```
 
 ### 실제 ROBOTIS와의 차이점
 
