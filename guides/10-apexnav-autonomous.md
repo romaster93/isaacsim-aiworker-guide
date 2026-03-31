@@ -19,6 +19,8 @@
 
 > **확인**: `ros2 topic list | grep habitat` -> `/habitat/odom`, `/habitat/camera_rgb` 등이 보여야 합니다.
 
+**Phase B -- VLM 서버 (생략, [Step 11](11-apexnav-vlm.md)에서 실행)**
+
 **Phase C -- ApexNAV 플래너 실행**
 
 > **순서 주의**: `target_label_publisher.py`를 **먼저** 실행한 후 C++ 플래너를 실행하세요.
