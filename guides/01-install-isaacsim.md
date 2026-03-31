@@ -160,4 +160,4 @@ Ubuntu 24.04에서는 ROS 2 Jazzy internal libs가 자동으로 로드됩니다.
 
 ---
 **Status**: COMPLETED
-**Next**: [Step 2: Import URDF](02-import-urdf.md)
+**다음**: [Step 2: Import URDF](02-import-urdf.md)

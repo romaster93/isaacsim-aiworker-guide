@@ -707,4 +707,4 @@ ros2 run rqt_image_view rqt_image_view /zed_mini/depth
 
 **Status**: VERIFIED — SLAM 매핑 및 Nav2 자율 주행 동작 확인
 **이전**: [Step 6: Swerve Drive](06-swerve-drive.md)
-**다음**: (완료 후 추가 예정)
+**다음**: [Step 8: ApexNAV 개요](08-apexnav-overview.md)

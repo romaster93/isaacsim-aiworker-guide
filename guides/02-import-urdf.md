@@ -150,4 +150,5 @@ IsaacSim에서 Material을 별도로 추가하거나, 사전 구성된 USD 파�
 
 ---
 **Status**: COMPLETED (방법 A 완료)
-**Next**: [Step 3: Import Sensors](03-import-sensors.md)
+**이전**: [Step 1: Install IsaacSim](01-install-isaacsim.md)
+**다음**: [Step 3: Import Sensors](03-import-sensors.md)

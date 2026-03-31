@@ -373,6 +373,6 @@ IsaacSim 5.1.0의 확인된 버그입니다 (GitHub [#329](https://github.com/is
 - 단순히 joint1만 제어하면 물리적으로 비현실적인 동작이 발생할 수 있음
 
 ---
-**Status**: IN PROGRESS
-**완료**: Action Graph 설정 (Python Script Editor 방식)
-**다음**: Python 제어 스크립트 테스트 → [Step 6: Swerve Drive](06-swerve-drive.md)
+**Status**: COMPLETED
+**이전**: [Step 4: Publish TF Tree](04-publish-tf.md)
+**다음**: [Step 6: Swerve Drive](06-swerve-drive.md)

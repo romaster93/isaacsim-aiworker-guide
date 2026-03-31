@@ -1,4 +1,4 @@
-# Step 10: ApexNAV 브릿지 설정
+# Step 9: ApexNAV 브릿지 설정
 
 ## [3] 아키텍처
 
@@ -194,4 +194,4 @@ ros2 topic echo /habitat/odom --field header.frame_id --once
 
 ---
 
-**이전**: [Step 9: ApexNAV 개요](09-apexnav-overview.md) | **다음**: [Step 11: ApexNAV 자율 주행](11-apexnav-autonomous.md)
+**이전**: [Step 8: ApexNAV 개요](08-apexnav-overview.md) | **다음**: [Step 10: ApexNAV 자율 주행](10-apexnav-autonomous.md)

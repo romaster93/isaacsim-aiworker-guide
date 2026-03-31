@@ -1,4 +1,4 @@
-# Step 11: ApexNAV 자율 주행
+# Step 10: ApexNAV 자율 주행
 
 ## [5] 실행
 
@@ -21,15 +21,18 @@
 
 **Phase C -- ApexNAV 플래너 실행**
 
+> **순서 주의**: `target_label_publisher.py`를 **먼저** 실행한 후 C++ 플래너를 실행하세요.
+> 플래너가 먼저 뜨면 `/detector/confidence_threshold`가 없어서 `[Real] No odom || No target confidence threshold` 경고가 반복됩니다.
+
 | 터미널 | 환경 | 내용 | 명령어 |
 |--------|------|------|--------|
-| **9** | `conda deactivate` + `source ros2-bridge-env.sh` + `source ~/ApexNav_ROS2_wrapper/install/setup.bash` | C++ 플래너 | `ros2 launch exploration_manager exploration_traj.launch.py` |
 | **11** | `conda deactivate` + `source ros2-bridge-env.sh` | RViz | `rviz2 --ros-args -p use_sim_time:=true` |
-| **12** | `conda deactivate` + `source ros2-bridge-env.sh` | 물체 명령 | `python3 ~/ms_AIworker/scripts/target_label_publisher.py` |
+| **12** | `conda deactivate` + `source ros2-bridge-env.sh` | 물체 명령 (먼저!) | `python3 ~/ms_AIworker/scripts/target_label_publisher.py` |
+| **9** | `conda deactivate` + `source ros2-bridge-env.sh` + `source ~/ApexNav_ROS2_wrapper/install/setup.bash` | C++ 플래너 | `ros2 launch exploration_manager exploration_traj.launch.py` |
 
 > **확인**: 터미널 9에서 `Exploration FSM initialized` 메시지가 나오면 준비 완료.
 
-> **VLM 통합** (Phase B + VLM 노드)은 [Step 12: ApexNAV VLM 통합](12-apexnav-vlm.md)에서 다룹니다.
+> **VLM 통합** (Phase B + VLM 노드)은 [Step 11: ApexNAV VLM 통합](11-apexnav-vlm.md)에서 다룹니다.
 
 ### 5.2 C++ 플래너 실행
 
@@ -192,4 +195,4 @@ ros2 run rqt_image_view rqt_image_view /habitat/camera_depth
 
 ---
 
-**이전**: [Step 10: ApexNAV 브릿지](10-apexnav-bridge.md) | **다음**: [Step 12: ApexNAV VLM 통합](12-apexnav-vlm.md)
+**이전**: [Step 9: ApexNAV 브릿지](09-apexnav-bridge.md) | **다음**: [Step 11: ApexNAV VLM 통합](11-apexnav-vlm.md)

@@ -883,6 +883,6 @@ A: 네! `scripts/swerve_controller.py`를 수정해서 실험해보세요. 추�
 
 ---
 
-**Status**: IN PROGRESS
+**Status**: COMPLETED
 **이전**: [Step 5: Control Humanoids](05-control-humanoids.md)
 **다음**: [Step 7: Navigation System](07-navigation-system.md)

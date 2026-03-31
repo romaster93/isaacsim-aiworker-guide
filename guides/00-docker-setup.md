@@ -79,7 +79,7 @@ nvidia-smi
 ### 설치가 필요한 경우
 
 ```bash
-dsudo apt update
+sudo apt update
 sudo apt install -y nvidia-driver-570
 sudo reboot
 ```

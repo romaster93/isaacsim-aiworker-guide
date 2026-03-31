@@ -1,4 +1,4 @@
-# Step 9: ApexNAV 개요
+# Step 8: ApexNAV 개요
 
 ## Overview
 
@@ -7,7 +7,7 @@
 ApexNAV란? **Zero-Shot Object Navigation** 시스템입니다. 로봇이 사전 학습 없이
 **"chair를 찾아가"** 같은 텍스트 명령만으로 환경을 탐색하고 목표 물체를 찾아 이동합니다.
 
-Nav2(Step 8)가 **좌표 기반** 자율 주행이라면, ApexNAV는 **물체 기반** 자율 주행입니다.
+Nav2(Step 7)가 **좌표 기반** 자율 주행이라면, ApexNAV는 **물체 기반** 자율 주행입니다.
 
 이 가이드를 끝내면:
 - "go to the chair" 같은 명령으로 로봇이 물체를 찾아 이동
@@ -41,7 +41,7 @@ Nav2(Step 8)가 **좌표 기반** 자율 주행이라면, ApexNAV는 **물체 �
 - [x] ROS2 Jazzy 환경 (`conda deactivate` + `source ros2-bridge-env.sh`)
 - [x] ApexNAV ROS2 Wrapper 빌드 완료
 
-> **Step 8(Nav2)은 필수가 아닙니다.** ApexNAV는 자체 경로 계획 시스템을 사용합니다.
+> **Step 7(Nav2)은 필수가 아닙니다.** ApexNAV는 자체 경로 계획 시스템을 사용합니다.
 > Nav2와 ApexNAV를 **동시에 실행하지 마세요** — 둘 다 `/cmd_vel`을 발행하므로 충돌합니다.
 
 ---
@@ -62,7 +62,7 @@ ApexNAV:
 
 ### Nav2와의 차이
 
-| 항목 | Nav2 (Step 8) | ApexNAV (Step 9~12) |
+| 항목 | Nav2 (Step 7) | ApexNAV (Step 8~11) |
 |------|--------------|------------------|
 | 목표 | **좌표** (x=3.0, y=2.0) | **물체** ("chair") |
 | 지도 | SLAM으로 미리 만듦 | **실시간** depth 기반 SDF 맵 |
@@ -223,4 +223,4 @@ ZED Mini에서 **RGB + Depth** 두 개의 토픽이 발행되어야 합니다:
 
 ---
 
-**이전**: [Step 8: Navigation System](08-navigation-system.md) | **다음**: [Step 10: ApexNAV 브릿지](10-apexnav-bridge.md)
+**이전**: [Step 7: Navigation System](07-navigation-system.md) | **다음**: [Step 9: ApexNAV 브릿지](09-apexnav-bridge.md)

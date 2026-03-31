@@ -358,4 +358,5 @@ IsaacSim 내부에서도 TF를 시각화할 수 있습니다:
 
 ---
 **Status**: COMPLETED
-**Next**: [Step 5: Control Humanoids](05-control-humanoids.md)
+**이전**: [Step 3: Import Sensors](03-import-sensors.md)
+**다음**: [Step 5: Control Humanoids](05-control-humanoids.md)
