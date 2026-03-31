@@ -26,7 +26,7 @@ import threading
 import rclpy
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
-from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float64, String
 
 
@@ -50,8 +50,14 @@ class TargetLabelPublisher(Node):
         self.confidence_pub = self.create_publisher(
             Float64, "/detector/confidence_threshold", RELIABLE_QOS
         )
+        goal_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
         self.goal_pub = self.create_publisher(
-            PoseStamped, "/move_base_simple/goal", RELIABLE_QOS
+            PoseStamped, "/move_base_simple/goal", goal_qos
         )
         self.itm_pub = self.create_publisher(
             Float64, "/blip2/cosine_score", RELIABLE_QOS

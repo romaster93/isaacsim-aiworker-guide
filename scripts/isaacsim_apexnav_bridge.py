@@ -3,18 +3,17 @@
 IsaacSim ↔ ApexNAV topic bridge node.
 
 Converts IsaacSim topics to ApexNAV expected format:
-  /odom              → /habitat/odom        (frame_id: odom → world)
-  /odom              → /habitat/sensor_pose (Habitat forward transform + camera height)
-  /zed_mini/rgb      → /habitat/camera_rgb  (frame_id → world)
-  /zed_mini/depth_image → /habitat/camera_depth (normalize meters → [0, 1])
+  /odom              → /habitat/odom         (frame_id → World)
+  TF(World→base_link)→ /habitat/camera_pose  (actual camera pose for C++ map_ros)
+  /odom              → /habitat/sensor_pose  (Habitat forward transform for VLM pipeline)
+  /zed_mini/rgb      → /habitat/camera_rgb   (frame_id → World)
+  /zed_mini/depth    → /habitat/camera_depth (normalize meters → [0, 1])
 
-QoS for publishers: BEST_EFFORT, KEEP_LAST, depth=10
-QoS for subscribers: /odom RELIABLE, /zed_mini/* RELIABLE VOLATILE
+Uses TF lookup for camera_pose to get robot's actual position in the fixed "World" frame.
 """
 
 import math
 
-import cv2
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
@@ -28,12 +27,17 @@ from rclpy.qos import (
     ReliabilityPolicy,
 )
 from sensor_msgs.msg import Image
-from tf_transformations import euler_from_quaternion, quaternion_from_euler
+from tf2_ros import Buffer, TransformListener
+from tf_transformations import (
+    euler_from_quaternion,
+    quaternion_from_euler,
+    quaternion_multiply,
+)
 
 
 # QoS profiles
 PUB_QOS = QoSProfile(
-    reliability=ReliabilityPolicy.BEST_EFFORT,
+    reliability=ReliabilityPolicy.RELIABLE,
     history=HistoryPolicy.KEEP_LAST,
     depth=10,
 )
@@ -51,22 +55,41 @@ SUB_IMAGE_QOS = QoSProfile(
     durability=DurabilityPolicy.VOLATILE,
 )
 
+# Camera optical frame → robot base_link rotation quaternion (x, y, z, w)
+# Camera: z-forward, x-right, y-down → Robot: x-forward, y-left, z-up
+Q_CAM_TO_BASE = np.array([-0.5, 0.5, -0.5, 0.5])
+
+# Camera offset from base_link (from TF: base_link → arm_base_link → head_link1 → head_link2)
+CAM_OFFSET_X = 0.066
+CAM_OFFSET_Y = 0.0
+CAM_OFFSET_Z = 1.58
+
+# Fixed frame for map
+FIXED_FRAME = "World"
+
 
 class IsaacSimApexNavBridge(Node):
     def __init__(self):
         super().__init__("isaacsim_apexnav_bridge")
 
         # Parameters
-        self.declare_parameter("camera_height", 0.88)
+        self.declare_parameter("camera_height_habitat", 0.88)
         self.declare_parameter("max_depth", 5.0)
 
-        self.camera_height = self.get_parameter("camera_height").value
+        self.camera_height_habitat = self.get_parameter("camera_height_habitat").value
         self.max_depth = self.get_parameter("max_depth").value
 
         self.bridge = CvBridge()
 
+        # TF2 for looking up robot position in World frame
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
         # Publishers
         self.odom_pub = self.create_publisher(Odometry, "/habitat/odom", PUB_QOS)
+        self.camera_pose_pub = self.create_publisher(
+            Odometry, "/habitat/camera_pose", PUB_QOS
+        )
         self.sensor_pose_pub = self.create_publisher(
             Odometry, "/habitat/sensor_pose", PUB_QOS
         )
@@ -88,71 +111,98 @@ class IsaacSimApexNavBridge(Node):
 
         self.get_logger().info(
             f"IsaacSim↔ApexNAV bridge started "
-            f"(camera_height={self.camera_height}m, max_depth={self.max_depth}m)"
+            f"(frame={FIXED_FRAME}, cam_z={CAM_OFFSET_Z}m, "
+            f"max_depth={self.max_depth}m)"
         )
 
     # ------------------------------------------------------------------
-    # /odom → /habitat/odom
+    # /odom callback → publishes odom, camera_pose, sensor_pose
     # ------------------------------------------------------------------
     def odom_callback(self, msg: Odometry) -> None:
-        # --- /habitat/odom: same data, frame_id changed to "world" ---
+        # --- /habitat/odom: use TF-based position in World frame ---
+        tf_pos, tf_yaw = self._get_robot_pose_from_tf()
+        if tf_pos is None:
+            return
+
         odom_out = Odometry()
-        odom_out.header = msg.header
-        odom_out.header.frame_id = "world"
-        odom_out.child_frame_id = msg.child_frame_id
-        odom_out.pose = msg.pose
+        odom_out.header.stamp = msg.header.stamp
+        odom_out.header.frame_id = FIXED_FRAME
+        odom_out.child_frame_id = "base_link"
+        odom_out.pose.pose.position = Point(x=tf_pos[0], y=tf_pos[1], z=tf_pos[2])
+        sy = math.sin(tf_yaw * 0.5)
+        cy = math.cos(tf_yaw * 0.5)
+        odom_out.pose.pose.orientation = Quaternion(x=0.0, y=0.0, z=sy, w=cy)
         odom_out.twist = msg.twist
         self.odom_pub.publish(odom_out)
 
-        # --- /habitat/sensor_pose: Habitat forward transform ---
+        # --- /habitat/camera_pose: actual camera pose for C++ map_ros ---
+        self.camera_pose_pub.publish(
+            self._make_camera_pose(msg.header.stamp, tf_pos, tf_yaw)
+        )
+
+        # --- /habitat/sensor_pose: Habitat format for VLM pipeline ---
         self.sensor_pose_pub.publish(
-            self._make_sensor_pose(msg)
+            self._make_habitat_sensor_pose(msg.header.stamp, tf_pos, tf_yaw)
         )
 
-    def _make_sensor_pose(self, odom_msg: Odometry) -> Odometry:
+    def _get_robot_pose_from_tf(self):
+        """Look up World → base_link transform to get robot's actual position."""
+        try:
+            tf = self.tf_buffer.lookup_transform(
+                FIXED_FRAME, "base_link", rclpy.time.Time()
+            )
+            pos = tf.transform.translation
+            orn = tf.transform.rotation
+            _, _, yaw = euler_from_quaternion([orn.x, orn.y, orn.z, orn.w])
+            return (pos.x, pos.y, pos.z), yaw
+        except Exception:
+            return None, None
+
+    def _make_camera_pose(self, stamp, robot_pos, yaw) -> Odometry:
         """
-        Apply the Habitat publisher forward transform (habitat_publisher.py:62-75).
+        Actual camera pose in World frame for C++ map_ros depth projection.
 
-        IsaacSim ROS odom:
-          pos = (x_ros, y_ros, z_ros≈0), yaw = yaw_ros
-
-        Habitat GPS mapping:
-          gps[0] = -y_ros,  gps[1] = z_ros ≈ 0,  gps[2] = -x_ros
-          compass = yaw_ros,  pitch = 0
-
-        habitat_publisher.publish_camera_odom forward transform:
-          position.x = -gps[2]           =  x_ros
-          position.y = -gps[0]           =  y_ros
-          position.z = gps[1] + height   =  camera_height   (z_ros ≈ 0)
-          orientation = quaternion_from_euler(pitch + pi/2, pi, compass + pi/2)
-                      = quaternion_from_euler(pi/2, pi, yaw_ros + pi/2)
-
-        Inverse (real_world_test_habitat.py:35-51) recovers gps and compass correctly.
+        orientation = q_yaw * Q_CAM_TO_BASE
+        position = robot_pos + rotated camera offset
         """
-        pos = odom_msg.pose.pose.position
-        orn = odom_msg.pose.pose.orientation
+        q_yaw = np.array([0.0, 0.0, math.sin(yaw / 2.0), math.cos(yaw / 2.0)])
+        q_cam_world = quaternion_multiply(q_yaw, Q_CAM_TO_BASE)
 
-        # Extract yaw from odom orientation
-        _, _, yaw_ros = euler_from_quaternion(
-            [orn.x, orn.y, orn.z, orn.w]
+        cos_y, sin_y = math.cos(yaw), math.sin(yaw)
+        cam_x = robot_pos[0] + cos_y * CAM_OFFSET_X - sin_y * CAM_OFFSET_Y
+        cam_y = robot_pos[1] + sin_y * CAM_OFFSET_X + cos_y * CAM_OFFSET_Y
+        cam_z = robot_pos[2] + CAM_OFFSET_Z
+
+        out = Odometry()
+        out.header.stamp = stamp
+        out.header.frame_id = FIXED_FRAME
+        out.child_frame_id = "base_link"
+        out.pose.pose = Pose(
+            position=Point(x=cam_x, y=cam_y, z=cam_z),
+            orientation=Quaternion(
+                x=q_cam_world[0], y=q_cam_world[1],
+                z=q_cam_world[2], w=q_cam_world[3],
+            ),
         )
+        return out
 
-        # Forward transform
-        q = quaternion_from_euler(math.pi / 2.0, math.pi, yaw_ros + math.pi / 2.0)
+    def _make_habitat_sensor_pose(self, stamp, robot_pos, yaw) -> Odometry:
+        """Habitat publisher forward transform for VLM pipeline (Phase 3)."""
+        q = quaternion_from_euler(math.pi / 2.0, math.pi, yaw + math.pi / 2.0)
 
-        sensor_pose = Odometry()
-        sensor_pose.header = odom_msg.header
-        sensor_pose.header.frame_id = "world"
-        sensor_pose.child_frame_id = "base_link"
-        sensor_pose.pose.pose = Pose(
+        out = Odometry()
+        out.header.stamp = stamp
+        out.header.frame_id = FIXED_FRAME
+        out.child_frame_id = "base_link"
+        out.pose.pose = Pose(
             position=Point(
-                x=float(pos.x),
-                y=float(pos.y),
-                z=float(self.camera_height),
+                x=robot_pos[0],
+                y=robot_pos[1],
+                z=float(self.camera_height_habitat),
             ),
             orientation=Quaternion(x=q[0], y=q[1], z=q[2], w=q[3]),
         )
-        return sensor_pose
+        return out
 
     # ------------------------------------------------------------------
     # /zed_mini/rgb → /habitat/camera_rgb
@@ -160,7 +210,7 @@ class IsaacSimApexNavBridge(Node):
     def rgb_callback(self, msg: Image) -> None:
         out = Image()
         out.header = msg.header
-        out.header.frame_id = "world"
+        out.header.frame_id = FIXED_FRAME
         out.height = msg.height
         out.width = msg.width
         out.encoding = msg.encoding
@@ -170,7 +220,7 @@ class IsaacSimApexNavBridge(Node):
         self.rgb_pub.publish(out)
 
     # ------------------------------------------------------------------
-    # /zed_mini/depth_image → /habitat/camera_depth (normalized [0, 1])
+    # /zed_mini/depth → /habitat/camera_depth (normalized [0, 1])
     # ------------------------------------------------------------------
     def depth_callback(self, msg: Image) -> None:
         try:
@@ -179,12 +229,9 @@ class IsaacSimApexNavBridge(Node):
             self.get_logger().warn(f"cv_bridge depth conversion failed: {e}")
             return
 
-        # Handle NaN / Inf
         cv_image = np.nan_to_num(
             cv_image, nan=0.0, posinf=self.max_depth, neginf=0.0
         )
-
-        # Normalize meters → [0, 1]
         cv_image = np.clip(cv_image / self.max_depth, 0.0, 1.0).astype(np.float32)
 
         try:
@@ -194,7 +241,7 @@ class IsaacSimApexNavBridge(Node):
             return
 
         depth_out.header = msg.header
-        depth_out.header.frame_id = "world"
+        depth_out.header.frame_id = FIXED_FRAME
         self.depth_pub.publish(depth_out)
 
 
