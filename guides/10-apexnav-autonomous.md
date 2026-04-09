@@ -10,12 +10,35 @@
 
 **Phase A -- 기본 인프라 (IsaacSim + 로봇 제어)**
 
-| 터미널 | 환경 | 내용 | 명령어 |
-|--------|------|------|--------|
-| **1** | `conda activate isaac_sim` | IsaacSim | `isaacsim` -> Play |
-| **2** | `conda deactivate` + `source ros2-bridge-env.sh` | Swerve Controller | `python3 ~/ms_AIworker/scripts/swerve_controller.py` |
-| **3** | `conda deactivate` + `source ros2-bridge-env.sh` | Nav2 Bridge (TF) | `python3 ~/ms_AIworker/scripts/nav2_bridge.py` |
-| **4** | `conda deactivate` + `source ros2-bridge-env.sh` | ApexNAV Bridge | `python3 ~/ms_AIworker/scripts/isaacsim_apexnav_bridge.py --ros-args --params-file ~/ms_AIworker/config/apexnav_bridge.yaml` |
+| 터미널 | 내용 |
+|--------|------|
+| **1** | IsaacSim 실행 후 Play 버튼 클릭 |
+| **2** | Swerve Controller |
+| **3** | Nav2 Bridge (TF) |
+| **4** | ApexNAV Bridge |
+
+각 터미널에서 아래 명령어를 복붙하세요:
+
+**터미널 1 (IsaacSim)**:
+```bash
+conda activate isaac_sim && isaacsim
+```
+> IsaacSim이 열리면 씬을 열고 **Play** 버튼을 누르세요.
+
+**터미널 2 (Swerve Controller)**:
+```bash
+conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh && python3 ~/ms_AIworker/scripts/swerve_controller.py
+```
+
+**터미널 3 (Nav2 Bridge)**:
+```bash
+conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh && python3 ~/ms_AIworker/scripts/nav2_bridge.py
+```
+
+**터미널 4 (ApexNAV Bridge)**:
+```bash
+conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh && python3 ~/ms_AIworker/scripts/isaacsim_apexnav_bridge.py --ros-args --params-file ~/ms_AIworker/config/apexnav_bridge.yaml
+```
 
 > **확인**: `ros2 topic list | grep habitat` -> `/habitat/odom`, `/habitat/camera_rgb` 등이 보여야 합니다.
 
@@ -28,12 +51,34 @@
 > **순서 주의**: `target_label_publisher.py`를 **먼저** 실행한 후 C++ 플래너를 실행하세요.
 > 플래너가 먼저 뜨면 `/detector/confidence_threshold`가 없어서 `[Real] No odom || No target confidence threshold` 경고가 반복됩니다.
 
-| 터미널 | 환경 | 내용 | 명령어 |
-|--------|------|------|--------|
-| **11** | `conda deactivate` + `source ros2-bridge-env.sh` | RViz | `rviz2 --ros-args -p use_sim_time:=true` |
-| **12** | `conda deactivate` + `source ros2-bridge-env.sh` | 물체 명령 (먼저!) | `python3 ~/ms_AIworker/scripts/target_label_publisher.py` |
-| **9** | `conda deactivate` + `source ros2-bridge-env.sh` + `source ~/ApexNav_ROS2_wrapper/install/setup.bash` | C++ 플래너 | `ros2 launch exploration_manager exploration_traj.launch.py` |
-| **13** | `conda deactivate` + `source ros2-bridge-env.sh` + `source ~/ApexNav_ROS2_wrapper/install/setup.bash` | Swerve Path Follower (traj_server 대체) | `python3 ~/ms_AIworker/scripts/swerve_path_follower.py` |
+| 터미널 | 내용 |
+|--------|------|
+| **11** | RViz |
+| **12** | 물체 명령 **(먼저 실행!)** |
+| **9** | C++ 플래너 |
+| **13** | Swerve Path Follower (traj_server 대체) |
+
+각 터미널에서 아래 명령어를 복붙하세요:
+
+**터미널 11 (RViz)**:
+```bash
+conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh && rviz2 --ros-args -p use_sim_time:=true
+```
+
+**터미널 12 (물체 명령 — 먼저 실행!)**:
+```bash
+conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh && python3 ~/ms_AIworker/scripts/target_label_publisher.py
+```
+
+**터미널 9 (C++ 플래너)**:
+```bash
+conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh && source ~/ApexNav_ROS2_wrapper/install/setup.bash && ros2 launch exploration_manager exploration_traj.launch.py 2>&1 | tee /tmp/apexnav_run.log
+```
+
+**터미널 13 (Swerve Path Follower)**:
+```bash
+conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh && source ~/ApexNav_ROS2_wrapper/install/setup.bash && python3 ~/ms_AIworker/scripts/swerve_path_follower.py
+```
 
 > **터미널 13 (swerve_path_follower)**: ApexNAV의 기본 `traj_server`는 unicycle MPC 라서 FFW-SG2 swerve의 vy를 활용 못 합니다. `exploration_traj.launch.py`에서 `traj_server`는 비활성화돼 있으며, 대신 이 노드가 `/planning/trajectory`(PolyTraj septic)를 직접 평가해 lookahead 0.25s pure-pursuit로 holonomic `/cmd_vel` 을 발행합니다. 진행 방향으로 로봇을 회전시켜(`angular.z`) depth 카메라가 항상 전방을 보도록 합니다. `trajectory_manager` msg가 필요하므로 `ApexNAV_ROS2_wrapper/install/setup.bash`를 source 하세요.
 
@@ -594,6 +639,69 @@ grep "No passable frontier" /tmp/apexnav_run.log | head -1
 
 ---
 
+## 전체 시스템 데이터 흐름
+
+```
+IsaacSim
+  ├─ /odom (FK 기반)  ──→  bridge  ──→  /habitat/odom (TF 기반, World 프레임)
+  ├─ /zed_mini/depth   ──→  bridge  ──→  /habitat/camera_depth (정규화 [0,1])
+  ├─ /zed_mini/rgb     ──→  bridge  ──→  /habitat/camera_rgb
+  ├─ TF(World→CameraLeft) → bridge  ──→  /habitat/camera_pose
+  └─ TF(World→base_link)  → bridge  ──→  /habitat/sensor_pose
+
+C++ exploration_node (algorithm_traj.launch.py)
+  ├─ 입력: /habitat/odom, /habitat/camera_pose, /habitat/camera_depth
+  ├─ SDF 맵 생성 → frontier 탐색 → KinoAstar 경로 → GCopter 궤적
+  └─ 출력: /planning/trajectory (PolyTraj)
+
+swerve_path_follower
+  ├─ 입력: /planning/trajectory, /habitat/odom
+  └─ 출력: /cmd_vel (feedforward + P제어)
+
+swerve_controller
+  ├─ 입력: /cmd_vel
+  └─ 출력: /isaac_sim/joint_commands → IsaacSim 로봇
+
+target_label_publisher (사용자 CLI)
+  ├─ 초기 360도 회전 (depth로 SDF 맵 구축)
+  └─ FSM 트리거: /detector/label + /move_base_simple/goal
+```
+
+### v_max 일관성 체크리스트
+
+`v_max`가 3곳에서 일치해야 합니다. 불일치 시 trajectory 추적 실패 또는 급정거:
+
+| 위치 | 파라미터 | 값 |
+|------|---------|-----|
+| `planning_param_ffw.yaml` | `max_vel` | 0.5 (내부 0.5×0.6 = **0.3**) |
+| `swerve_path_follower.py` | `v_max` | **0.3** |
+| `planning_param_ffw.yaml` | `kino_astar.max_vel`, `optimizer.max_vel` | 모두 0.5 (동일) |
+
+### 파라미터 튜닝 가이드
+
+| 증상 | 조치 | 파라미터 |
+|------|------|---------|
+| 로봇이 궤적 뒤처짐 | `kp_xy` 올리기 | `swerve_path_follower.py` 1.5 → 2.0 |
+| 오버슈트/진동 | `kp_xy` 낮추기, `v_max` 낮추기 | 1.5 → 1.0 |
+| 커브에서 불안정 | `lookahead` 줄이기 | 0.25 → 0.15 |
+| 회전이 느림 | `kp_yaw`, `max_omega` 올리기 | 2.0 → 3.0, 1.0 → 1.5 |
+| 제자리 회전이 너무 잦음 | `yaw_align_thresh` 올리기 | 80° → 100° |
+| 장애물에 너무 붙어서 감 | `obstacles_inflation` 올리기 | 0.45 → 0.55 (좁은 통로 주의) |
+| "No passable frontier" 반복 | `local_bound` 올리기, `min_contain_unknown` 내리기 | 10→15, 30→15 |
+| 탐색이 너무 빨리 끝남 | `max_depth` 줄이기 | `apexnav_bridge.yaml` 5.0 → 3.0 |
+
+### 좌표 프레임 주의사항
+
+| 프레임 | 설명 | 주의 |
+|--------|------|------|
+| `World` (대문자) | IsaacSim stage root, **고정** | 맵 프레임으로 사용. 모든 C++ 코드의 `frame_id` |
+| `world` (소문자) | articulation root | **로봇과 같이 움직임 — 절대 사용 금지** |
+| `odom` | swerve_controller FK 적분 원점 | nav2_bridge가 `odom → World` identity TF 발행 |
+| `base_link` | 로봇 중심 | TF 체인: odom → World → world → base_link |
+| `CameraLeft` | ZED Mini 왼쪽 카메라 | bridge가 TF lookup에 사용 |
+
+---
+
 ## [7] Troubleshooting
 
 ### ApexNAV Bridge에서 아무 토픽도 안 나옴 (TF lookup 실패)
@@ -669,6 +777,46 @@ grep "No passable frontier" /tmp/apexnav_run.log | head -1
 ```bash
 ros2 run rqt_image_view rqt_image_view /habitat/camera_depth
 ```
+
+### 로봇이 2초마다 멈추고 다시 출발함
+
+- `swerve_path_follower.py`의 stale trajectory 타임아웃이 trajectory 실행 중에도 체크되면 발생
+- 현재 코드는 trajectory 끝난 후에만 stale check를 수행하도록 수정됨
+- 여전히 발생하면: `stale_traj_timeout` 값 확인 (기본 0.5초), C++ `replan_time` 확인 (기본 1.0초)
+
+### "Odom far from traj" 에러 후 FINISH
+
+- 로봇이 trajectory에서 1.5m 이상 벗어나면 긴급 정지 → replan → frontier 못 찾으면 FINISH
+- 원인: path follower의 P 제어만으로는 trajectory 추적이 부정확
+- 해결: feedforward 속도 추가로 개선됨 (2026-04-09). 여전히 발생하면 `kp_xy` 올리기 (1.5 → 2.0)
+- C++ 임계값: `exploration_fsm_traj.cpp`에서 `norm() > 1.5` (원래 0.6, 완화됨)
+
+### 초기 회전이 두 바퀴 돌아감
+
+- 원인: odom FK 기반 yaw 누적이 실제 회전을 과소보고
+- 해결: TF(World→base_link) 기반으로 변경하여 ground-truth yaw 사용 (2026-04-09)
+- 여전히 발생하면: `ros2 topic echo /tf`로 World→base_link TF가 업데이트되는지 확인
+
+### max_depth 변경 후 주변이 전부 occupied
+
+- `config/apexnav_bridge.yaml`의 `max_depth`만 바꾸면 안 됨
+- `algorithm_traj.launch.py`가 같은 yaml을 읽으므로 launch도 재시작 필요
+- bridge + launch 양쪽 재시작해야 함
+
+### frontier가 멀리 생겨서 벽에 부딪힘
+
+- `free_ray_extrapolation`이 너무 크면 (>2.0) max-range 픽셀에서 실제보다 먼 곳까지 FREE로 마킹
+- 벽 뒤에 가짜 frontier 생성 → 로봇이 가다가 벽 만나면 frontier 소멸
+- 해결: `free_ray_extrapolation`을 0.95~1.5 사이로 유지
+
+### "No passable frontier" 반복
+
+- frontier는 발견되지만 A* 경로를 못 찾는 상태
+- 가능한 원인:
+  1. `obstacles_inflation`이 너무 커서 좁은 통로가 막힘 → 0.45 이하로
+  2. `local_bound`가 너무 작아서 먼 frontier를 탐색 못 함 → 10.0 이상으로
+  3. `min_contain_unknown`이 너무 커서 작은 frontier를 무시 → 15~30 사이로
+  4. kino_astar의 `length/width`가 실측보다 크면 통과 불가 → 실측값(0.56/0.51) 사용
 
 ---
 
