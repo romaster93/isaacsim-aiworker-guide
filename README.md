@@ -20,7 +20,8 @@ NVIDIA IsaacSim 5.1.0 + ROS2 Jazzy 환경에서 **ROBOTIS FFW-SG2 Swerve 로봇*
 | OS | Ubuntu 24.04 LTS |
 | ROS2 | Jazzy |
 | GPU | NVIDIA RTX PRO 6000 Blackwell |
-| ApexNAV | [romaster93/ApexNav_ROS2_wrapper](https://github.com/romaster93/ApexNav_ROS2_wrapper) |
+| ApexNAV (원본) | [romaster93/ApexNav_ROS2_wrapper](https://github.com/romaster93/ApexNav_ROS2_wrapper) (`main`) |
+| ApexNAV (IsaacSim swerve) | [isaacsim-ffw-swerve branch](https://github.com/romaster93/ApexNav_ROS2_wrapper/tree/isaacsim-ffw-swerve) — KinoAstar swerve 모드, map_ros 수정 등 |
 
 ## 가이드 목록
 

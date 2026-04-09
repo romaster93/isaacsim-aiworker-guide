@@ -1,5 +1,11 @@
 # Step 10: ApexNAV 자율 주행
 
+> **ApexNAV C++ 코드 (IsaacSim swerve 전용 branch)**:
+> [romaster93/ApexNav_ROS2_wrapper `isaacsim-ffw-swerve`](https://github.com/romaster93/ApexNav_ROS2_wrapper/tree/isaacsim-ffw-swerve)
+>
+> 이 가이드의 모든 C++ 수정사항 (KinoAstar swerve 모드, map_ros free_ray 분리, FSM odom_far 임계값 등)은 위 branch에 있습니다.
+> 원본 ApexNAV 코드는 `main` branch에 보존되어 있습니다.
+
 ## [5] 실행
 
 ### 5.1 전체 실행 순서
@@ -531,6 +537,39 @@ int state = map_->getOccupancy(pos);
 
 **파일**: `kino_astar.cpp:641-710`, `kino_astar.h`, `planning_param_ffw.yaml`
 
+### 왜 KinoAstar를 수정했는가?
+
+ApexNAV의 KinoAstar는 원래 **Ackermann(자동차형) 로봇**을 위해 설계되었습니다:
+
+| 구분 | Ackermann (원래 설계) | Swerve (FFW-SG2) |
+|------|----------------------|-------------------|
+| 조향 | 앞바퀴만 회전 (제한된 조향각) | 모든 바퀴 독립 회전 (360°) |
+| 이동 | 전진/후진만 가능, 횡이동 불가 | 전후좌우 + 대각선 이동 가능 |
+| 회전 | 이동하면서만 회전 (최소 회전 반경 있음) | 제자리 회전 가능 |
+| 충돌 체크 | yaw 각도 고려한 회전 박스 필수 | yaw와 이동 방향이 분리됨 |
+
+**문제점**: 원래 `isCollisionPosYaw()` 함수는 로봇의 yaw에 따라 footprint를 **회전시켜** 충돌 체크합니다. Ackermann 로봇은 이동 방향 = 로봇 정면이라 이게 맞지만, swerve 로봇은 **옆으로도 이동**하므로 yaw와 이동 방향이 다릅니다.
+
+**결과**:
+- 로봇이 옆으로 이동할 때 회전된 footprint가 실제보다 넓은 영역을 차지
+- 통과 가능한 통로를 "충돌"로 판정 → `isCollisionPosYaw occ!!!!!!!!` 폭주
+- trajectory 생성 실패 → "No passable frontier" → 조기 FINISH
+
+**해결 (`is_swerve: true`)**:
+- yaw를 무시하고 **axis-aligned 박스** (축 정렬 사각형)로 충돌 체크
+- `half_ext = max(length, width) / 2` → 어느 방향으로든 동일한 여유
+- 기존 Ackermann 로직은 `else` 분기에 보존 → `is_swerve: false`로 원복 가능
+
+```mermaid
+graph LR
+    subgraph "Ackermann (is_swerve=false)"
+        A1[yaw=30°] --> A2[회전된 박스로<br/>충돌 체크]
+    end
+    subgraph "Swerve (is_swerve=true)"
+        B1[yaw 무시] --> B2[축 정렬 박스로<br/>충돌 체크]
+    end
+```
+
 ```yaml
 kino_astar:
   is_swerve: true     # NEW: swerve 모드 활성화
@@ -641,30 +680,64 @@ grep "No passable frontier" /tmp/apexnav_run.log | head -1
 
 ## 전체 시스템 데이터 흐름
 
+### 실행 파이프라인
+
+```mermaid
+graph LR
+    A[IsaacSim<br/>Play 시작] --> B[swerve_controller<br/>관절 제어 + odom]
+    B --> C[nav2_bridge<br/>odom→World TF]
+    C --> D[apexnav_bridge<br/>토픽 변환]
+    D --> E[target_label_publisher<br/>360° 회전 + 목표 설정]
+    E --> F[C++ exploration_node<br/>SDF 맵 + frontier 탐색]
+    F --> G[swerve_path_follower<br/>trajectory 추종]
+    G --> B
 ```
-IsaacSim
-  ├─ /odom (FK 기반)  ──→  bridge  ──→  /habitat/odom (TF 기반, World 프레임)
-  ├─ /zed_mini/depth   ──→  bridge  ──→  /habitat/camera_depth (정규화 [0,1])
-  ├─ /zed_mini/rgb     ──→  bridge  ──→  /habitat/camera_rgb
-  ├─ TF(World→CameraLeft) → bridge  ──→  /habitat/camera_pose
-  └─ TF(World→base_link)  → bridge  ──→  /habitat/sensor_pose
 
-C++ exploration_node (algorithm_traj.launch.py)
-  ├─ 입력: /habitat/odom, /habitat/camera_pose, /habitat/camera_depth
-  ├─ SDF 맵 생성 → frontier 탐색 → KinoAstar 경로 → GCopter 궤적
-  └─ 출력: /planning/trajectory (PolyTraj)
+### 탐색 루프 (Exploration Loop)
 
-swerve_path_follower
-  ├─ 입력: /planning/trajectory, /habitat/odom
-  └─ 출력: /cmd_vel (feedforward + P제어)
+```mermaid
+graph TD
+    S[시작: 360° 회전] --> A[SDF 맵 빌드]
+    A --> B{frontier 존재?}
+    B -->|Yes| C[TSP 최적 순서 계산]
+    C --> D[KinoAstar 경로 계획]
+    D --> E[GCopter 궤적 최적화]
+    E --> F[swerve_path_follower<br/>feedforward + P 제어]
+    F --> G[로봇 이동 + depth 수집]
+    G --> A
+    B -->|No| H{odom에서 재시도}
+    H -->|실패| I[FINISH]
+    H -->|성공| C
+```
 
-swerve_controller
-  ├─ 입력: /cmd_vel
-  └─ 출력: /isaac_sim/joint_commands → IsaacSim 로봇
+### 토픽 흐름도
 
-target_label_publisher (사용자 CLI)
-  ├─ 초기 360도 회전 (depth로 SDF 맵 구축)
-  └─ FSM 트리거: /detector/label + /move_base_simple/goal
+```
+┌─────────────┐     ┌──────────────────┐     ┌────────────────────┐
+│  IsaacSim   │     │  apexnav_bridge  │     │  C++ exploration   │
+│             │     │                  │     │                    │
+│ /zed_mini/  │────→│ depth 정규화     │────→│ SDF 맵 빌드        │
+│   depth     │     │ meters→[0,1]     │     │ frontier 탐색      │
+│             │     │                  │     │ 경로 계획          │
+│ /zed_mini/  │────→│ frame_id 변환    │     │                    │
+│   rgb       │     │                  │     │                    │
+│             │     │ TF lookup        │────→│ camera_pose        │
+│ TF tree     │────→│ World→base_link  │     │ (depth→pointcloud) │
+│             │     │ World→CameraLeft │     │                    │
+└─────────────┘     └──────────────────┘     └────────┬───────────┘
+                                                       │
+                                                       │ /planning/trajectory
+                                                       │ (PolyTraj septic)
+                                                       ▼
+┌─────────────┐     ┌──────────────────┐     ┌────────────────────┐
+│  IsaacSim   │     │swerve_controller │     │swerve_path_follower│
+│             │     │                  │     │                    │
+│ /isaac_sim/ │◄────│ IK: cmd_vel →    │◄────│ feedforward 속도   │
+│ joint_cmds  │     │   joint commands │     │ + P 위치 보정      │
+│             │     │                  │     │ + yaw 추적         │
+│ /joint_     │────→│ FK: joint_states │     │                    │
+│  states     │     │   → /odom        │     │                    │
+└─────────────┘     └──────────────────┘     └────────────────────┘
 ```
 
 ### v_max 일관성 체크리스트
