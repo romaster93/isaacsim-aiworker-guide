@@ -42,6 +42,14 @@ PUB_QOS = QoSProfile(
     depth=10,
 )
 
+# C++ exploration_node subscribes with rmw_qos_profile_sensor_data (BEST_EFFORT)
+SENSOR_DATA_QOS = QoSProfile(
+    reliability=ReliabilityPolicy.BEST_EFFORT,
+    history=HistoryPolicy.KEEP_LAST,
+    depth=5,
+    durability=DurabilityPolicy.VOLATILE,
+)
+
 SUB_ODOM_QOS = QoSProfile(
     reliability=ReliabilityPolicy.RELIABLE,
     history=HistoryPolicy.KEEP_LAST,
@@ -55,17 +63,11 @@ SUB_IMAGE_QOS = QoSProfile(
     durability=DurabilityPolicy.VOLATILE,
 )
 
-# Camera optical frame → robot base_link rotation quaternion (x, y, z, w)
-# Camera: z-forward, x-right, y-down → Robot: x-forward, y-left, z-up
-Q_CAM_TO_BASE = np.array([-0.5, 0.5, -0.5, 0.5])
-
-# Camera offset from base_link (from TF: base_link → arm_base_link → head_link1 → head_link2)
-CAM_OFFSET_X = 0.066
-CAM_OFFSET_Y = 0.0
-CAM_OFFSET_Z = 1.58
-
 # Fixed frame for map
 FIXED_FRAME = "World"
+
+# Camera frame to look up in TF
+CAMERA_FRAME = "CameraLeft"
 
 
 class IsaacSimApexNavBridge(Node):
@@ -80,6 +82,7 @@ class IsaacSimApexNavBridge(Node):
         self.max_depth = self.get_parameter("max_depth").value
 
         self.bridge = CvBridge()
+        self.cam_reject_count = 0
 
         # TF2 for looking up robot position in World frame
         self.tf_buffer = Buffer()
@@ -88,14 +91,14 @@ class IsaacSimApexNavBridge(Node):
         # Publishers
         self.odom_pub = self.create_publisher(Odometry, "/habitat/odom", PUB_QOS)
         self.camera_pose_pub = self.create_publisher(
-            Odometry, "/habitat/camera_pose", PUB_QOS
+            Odometry, "/habitat/camera_pose", SENSOR_DATA_QOS
         )
         self.sensor_pose_pub = self.create_publisher(
-            Odometry, "/habitat/sensor_pose", PUB_QOS
+            Odometry, "/habitat/sensor_pose", SENSOR_DATA_QOS
         )
         self.rgb_pub = self.create_publisher(Image, "/habitat/camera_rgb", PUB_QOS)
         self.depth_pub = self.create_publisher(
-            Image, "/habitat/camera_depth", PUB_QOS
+            Image, "/habitat/camera_depth", SENSOR_DATA_QOS
         )
 
         # Subscribers
@@ -111,8 +114,7 @@ class IsaacSimApexNavBridge(Node):
 
         self.get_logger().info(
             f"IsaacSim↔ApexNAV bridge started "
-            f"(frame={FIXED_FRAME}, cam_z={CAM_OFFSET_Z}m, "
-            f"max_depth={self.max_depth}m)"
+            f"(frame={FIXED_FRAME}, max_depth={self.max_depth}m)"
         )
 
     # ------------------------------------------------------------------
@@ -135,15 +137,15 @@ class IsaacSimApexNavBridge(Node):
         odom_out.twist = msg.twist
         self.odom_pub.publish(odom_out)
 
-        # --- /habitat/camera_pose: actual camera pose for C++ map_ros ---
-        self.camera_pose_pub.publish(
-            self._make_camera_pose(msg.header.stamp, tf_pos, tf_yaw)
-        )
+        # --- /habitat/camera_pose: directly from TF World → CameraLeft ---
+        cam_pose = self._get_camera_pose_from_tf(msg.header.stamp)
+        if cam_pose is not None:
+            self.camera_pose_pub.publish(cam_pose)
 
         # --- /habitat/sensor_pose: Habitat format for VLM pipeline ---
-        self.sensor_pose_pub.publish(
-            self._make_habitat_sensor_pose(msg.header.stamp, tf_pos, tf_yaw)
-        )
+        sensor_pose = self._make_habitat_sensor_pose(msg.header.stamp, tf_pos, tf_yaw)
+        if sensor_pose is not None:
+            self.sensor_pose_pub.publish(sensor_pose)
 
     def _get_robot_pose_from_tf(self):
         """Look up World → base_link transform to get robot's actual position."""
@@ -158,36 +160,58 @@ class IsaacSimApexNavBridge(Node):
         except Exception:
             return None, None
 
-    def _make_camera_pose(self, stamp, robot_pos, yaw) -> Odometry:
-        """
-        Actual camera pose in World frame for C++ map_ros depth projection.
+    def _get_camera_pose_from_tf(self, stamp) -> Odometry:
+        """Look up World → CameraLeft TF directly for camera pose."""
+        try:
+            tf = self.tf_buffer.lookup_transform(
+                FIXED_FRAME, CAMERA_FRAME, rclpy.time.Time()
+            )
+            t = tf.transform.translation
+            r = tf.transform.rotation
 
-        orientation = q_yaw * Q_CAM_TO_BASE
-        position = robot_pos + rotated camera offset
-        """
-        q_yaw = np.array([0.0, 0.0, math.sin(yaw / 2.0), math.cos(yaw / 2.0)])
-        q_cam_world = quaternion_multiply(q_yaw, Q_CAM_TO_BASE)
+            # Guard: all components must be finite
+            if not all(math.isfinite(v) for v in (t.x, t.y, t.z, r.x, r.y, r.z, r.w)):
+                self.cam_reject_count += 1
+                self.get_logger().warn(
+                    f"camera_pose TF has non-finite values, rejected "
+                    f"(total={self.cam_reject_count})",
+                    throttle_duration_sec=1.0,
+                )
+                return None
 
-        cos_y, sin_y = math.cos(yaw), math.sin(yaw)
-        cam_x = robot_pos[0] + cos_y * CAM_OFFSET_X - sin_y * CAM_OFFSET_Y
-        cam_y = robot_pos[1] + sin_y * CAM_OFFSET_X + cos_y * CAM_OFFSET_Y
-        cam_z = robot_pos[2] + CAM_OFFSET_Z
+            # Guard: quaternion must be unit (norm within 1% of 1.0)
+            nrm = math.sqrt(r.x * r.x + r.y * r.y + r.z * r.z + r.w * r.w)
+            if not (0.99 <= nrm <= 1.01):
+                self.cam_reject_count += 1
+                self.get_logger().warn(
+                    f"camera_pose quaternion norm={nrm:.4f} out of range, rejected "
+                    f"(total={self.cam_reject_count})",
+                    throttle_duration_sec=1.0,
+                )
+                return None
 
-        out = Odometry()
-        out.header.stamp = stamp
-        out.header.frame_id = FIXED_FRAME
-        out.child_frame_id = "base_link"
-        out.pose.pose = Pose(
-            position=Point(x=cam_x, y=cam_y, z=cam_z),
-            orientation=Quaternion(
-                x=q_cam_world[0], y=q_cam_world[1],
-                z=q_cam_world[2], w=q_cam_world[3],
-            ),
-        )
-        return out
+            out = Odometry()
+            out.header.stamp = stamp
+            out.header.frame_id = FIXED_FRAME
+            out.child_frame_id = CAMERA_FRAME
+            out.pose.pose = Pose(
+                position=Point(x=t.x, y=t.y, z=t.z),
+                orientation=Quaternion(x=r.x, y=r.y, z=r.z, w=r.w),
+            )
+            return out
+        except Exception:
+            return None
 
-    def _make_habitat_sensor_pose(self, stamp, robot_pos, yaw) -> Odometry:
+    def _make_habitat_sensor_pose(self, stamp, robot_pos, yaw) -> Odometry | None:
         """Habitat publisher forward transform for VLM pipeline (Phase 3)."""
+        # Guard: yaw or robot_pos components must be finite
+        if not math.isfinite(yaw) or not all(math.isfinite(v) for v in robot_pos):
+            self.get_logger().warn(
+                "sensor_pose skipped: non-finite yaw or position",
+                throttle_duration_sec=1.0,
+            )
+            return None
+
         q = quaternion_from_euler(math.pi / 2.0, math.pi, yaw + math.pi / 2.0)
 
         out = Odometry()
@@ -230,7 +254,7 @@ class IsaacSimApexNavBridge(Node):
             return
 
         cv_image = np.nan_to_num(
-            cv_image, nan=0.0, posinf=self.max_depth, neginf=0.0
+            cv_image, nan=self.max_depth, posinf=self.max_depth, neginf=0.0
         )
         cv_image = np.clip(cv_image / self.max_depth, 0.0, 1.0).astype(np.float32)
 

@@ -1,0 +1,11 @@
+isaacsim_apexnav_bridge:
+  ros__parameters:
+    # depth 정규화 최대 거리 (meters)
+    # - bridge: meters / max_depth → [0, 1] 정규화
+    # - C++ depth_filter_maxdist도 같이 변경해야 함
+    #   (algorithm_traj.launch.py:75, max_depth - 0.01)
+    # 작을수록 가까운 것만 보여서 탐색이 길어짐
+    max_depth: 5.0
+
+    # Habitat 가상 카메라 높이 (VLM pipeline round-trip용, 실제 카메라 높이 아님)
+    camera_height_habitat: 0.88
