@@ -38,7 +38,7 @@ NVIDIA IsaacSim 5.1.0 + ROS2 Jazzy 환경에서 **ROBOTIS FFW-SG2 Swerve 로봇*
 | 08 | [08-apexnav-overview.md](guides/08-apexnav-overview.md) | ApexNAV 개요 (Semantic Frontier Exploration) | 완료 |
 | 09 | [09-apexnav-bridge.md](guides/09-apexnav-bridge.md) | IsaacSim ↔ ApexNAV 토픽 브릿지 구성 | 완료 |
 | 10 | [10-apexnav-autonomous.md](guides/10-apexnav-autonomous.md) | ApexNAV 자율 탐색 실행 (Phase 2) | 완료 |
-| 11 | [11-apexnav-vlm.md](guides/11-apexnav-vlm.md) | VLM 기반 물체 탐색 (Phase 3 — 미완성) | 진행 중 |
+| 11 | [11-apexnav-vlm.md](guides/11-apexnav-vlm.md) | VLM 기반 물체 탐색 (Phase 3) | 기본 동작 확인 (2026-04-16) |
 | 12 | [12-interioragent-dataset.md](guides/12-interioragent-dataset.md) | InteriorAgent 실내 씬 데이터셋 활용 | 완료 |
 
 ## 빠른 시작
@@ -96,6 +96,8 @@ ros2 run ms_aiworker swerve_controller.py
 | `scripts/isaacsim_apexnav_bridge.py` | IsaacSim ↔ ApexNAV 토픽 변환 (depth 정규화, 좌표 변환) |
 | `scripts/swerve_path_follower.py` | trajectory 추종 (feedforward + P 제어) |
 | `scripts/target_label_publisher.py` | 탐색 목표 물체 CLI 발행 (초기 360° 회전 포함) |
+| `scripts/isaacsim_realworld_node.py` | VLM 처리 노드 (YOLOv7/GroundingDINO/BLIP2/MobileSAM → object cloud) |
+| `scripts/vlm_diagnostic.py` | VLM 토픽 Hz/sync/cloud centroid 실시간 검증 도구 |
 | `scripts/laser_merger.py` | 양쪽 2D LiDAR 병합 → `/scan` |
 | `scripts/nav2_bridge.py` | odom → World static TF (Nav2 연동) |
 
@@ -170,13 +172,13 @@ ms_AIworker/
             └── World2.usd
 ```
 
-## 현재 개발 상태 (2026-04-09 기준)
+## 현재 개발 상태 (2026-04-16 기준)
 
 | 단계 | 내용 | 상태 |
 |------|------|------|
 | Phase 1 | IsaacSim 환경 구성 (URDF, 센서, TF, 제어) | 완료 |
 | Phase 2 | ApexNAV 자율 탐색 (SDF 맵 생성 + Frontier 탐색) | 완료 |
-| Phase 3 | VLM 기반 물체 탐색 (target_label → 시맨틱 탐색) | 진행 중 |
+| Phase 3 | VLM 기반 물체 탐색 (target_label → 시맨틱 탐색) | 기본 동작 확인 (2026-04-16, mask leak 수정) |
 
 ## 주요 설계 사항
 
