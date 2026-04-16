@@ -77,7 +77,50 @@ nvidia-smi
 | MobileSAM | MobileSAM | ~0.5GB |
 | IsaacSim | RTX 렌더링 | ~6-8GB |
 
-### 2.3 Ollama 설정
+### 2.3 외부 저장소 준비 (YOLOv7 / GroundingDINO)
+
+VLM 서버 일부는 외부 저장소 **코드**가 필요합니다. wrapper에는 가중치(`data/*.pt`, `data/*.pth`)만 있고 저장소는 포함되어 있지 않으므로 심링크 또는 clone이 필요합니다.
+
+#### YOLOv7 (터미널 5용)
+
+`vlm/detector/yolov7.py` 13줄의 `sys.path.insert(0, "yolov7/")`가 wrapper 루트 기준 상대경로로 WongKinYiu/yolov7 저장소를 찾습니다.
+
+```bash
+# 이미 ~/ApexNav/yolov7 이 있으면 심링크:
+ln -s /home/cho/ApexNav/yolov7 /home/cho/ApexNav_ROS2_wrapper/yolov7
+
+# 없으면 clone:
+cd ~/ApexNav_ROS2_wrapper && git clone https://github.com/WongKinYiu/yolov7.git
+```
+
+없으면 `NameError: name 'attempt_load' is not defined`로 실패합니다.
+
+#### GroundingDINO (터미널 6용)
+
+`grounding_dino.py`의 `load_model()`이 wrapper 루트 기준 `GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py` 경로를 읽습니다.
+
+```bash
+# 이미 ~/GroundingDINO 이 있으면 심링크:
+ln -s /home/cho/GroundingDINO /home/cho/ApexNav_ROS2_wrapper/GroundingDINO
+
+# 없으면 clone + pip install (editable):
+cd ~/ApexNav_ROS2_wrapper && git clone https://github.com/IDEA-Research/GroundingDINO.git && pip install -e GroundingDINO
+```
+
+없으면 `FileNotFoundError: file ".../GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py" does not exist` 로 실패합니다.
+
+### 2.4 Python 패키지 버전 호환
+
+`apexnav_ros2` 환경의 `transformers 4.43.2`는 `huggingface-hub<1.0`을 요구합니다. 현재 `huggingface-hub 1.x`가 설치되어 있으면 GroundingDINO/BLIP2 로딩 시 `ImportError: huggingface-hub>=0.23.2,<1.0 is required` 에러가 납니다.
+
+```bash
+conda activate apexnav_ros2
+pip install "huggingface-hub>=0.23.2,<1.0"
+```
+
+> **왜 업그레이드 안 하나**: transformers를 4.50+로 올리면 hf-hub 1.x와 호환되지만, 기존 VLM 서버 코드(특히 BLIP2-ITM)가 4.43 기준으로 검증된 상태라 다운그레이드가 안전합니다.
+
+### 2.5 Ollama 설정
 
 LLM은 VLM 노드 시작 시 물체 탐지 대상 확장 및 방 추론에 사용됩니다.
 
@@ -103,10 +146,12 @@ VLM 서버 4개를 **별도 터미널**에서 실행합니다.
 
 | 터미널 | 환경 | 서버 | 명령어 |
 |--------|------|------|--------|
-| **5** | `conda activate apexnav_ros2` | YOLOv7 (포트 12184) | `cd ~/ApexNav_ROS2_wrapper && python vlm/detector/yolov7.py` |
-| **6** | `conda activate apexnav_ros2` | GroundingDINO (포트 12181) | `cd ~/ApexNav_ROS2_wrapper && python vlm/detector/grounding_dino.py` |
-| **7** | `conda activate apexnav_ros2` | BLIP2-ITM (포트 12182) | `cd ~/ApexNav_ROS2_wrapper && python vlm/itm/blip2itm.py` |
-| **8** | `conda activate apexnav_ros2` | MobileSAM (포트 12183) | `cd ~/ApexNav_ROS2_wrapper && python vlm/segmentor/sam.py` |
+| **5** | `conda activate apexnav_ros2` | YOLOv7 (포트 12184) | `cd ~/ApexNav_ROS2_wrapper && python -m vlm.detector.yolov7` |
+| **6** | `conda activate apexnav_ros2` | GroundingDINO (포트 12181) | `cd ~/ApexNav_ROS2_wrapper && python -m vlm.detector.grounding_dino` |
+| **7** | `conda activate apexnav_ros2` | BLIP2-ITM (포트 12182) | `cd ~/ApexNav_ROS2_wrapper && python -m vlm.itm.blip2itm` |
+| **8** | `conda activate apexnav_ros2` | MobileSAM (포트 12183) | `cd ~/ApexNav_ROS2_wrapper && python -m vlm.segmentor.sam` |
+
+> **`-m` 모듈 실행이 필요한 이유**: `vlm/` 내부 파일은 `from vlm.coco_classes import ...` 같은 절대 import와 `from ..server_wrapper import ...` 같은 상대 import를 둘 다 사용합니다. 스크립트로 직접 실행하면(`python vlm/detector/yolov7.py`) `ModuleNotFoundError: No module named 'vlm'` 또는 `attempted relative import with no known parent package` 에러가 납니다. `-m` 으로 패키지 경로 실행 필수.
 
 ### 각 서버 역할
 
@@ -140,8 +185,10 @@ Phase A (Step 10의 기본 인프라)와 Phase B (VLM 서버 4개)가 모두 실
 
 | 터미널 | 환경 | 내용 | 명령어 |
 |--------|------|------|--------|
-| **10** | `conda activate apexnav_ros2` | VLM 노드 | `python3 ~/ms_AIworker/scripts/isaacsim_realworld_node.py` |
+| **10** | `conda activate apexnav_ros2` + `source ~/ApexNav_ROS2_wrapper/install/setup.bash` | VLM 노드 | `python3 ~/ms_AIworker/scripts/isaacsim_realworld_node.py` |
 | **12** | `conda deactivate` + `source ros2-bridge-env.sh` | 물체 명령 (이미 실행 중) | `python3 ~/ms_AIworker/scripts/target_label_publisher.py` |
+
+> **터미널 10 setup.bash 필요**: `isaacsim_realworld_node.py`가 `plan_env.msg.MultipleMasksWithConfidence` custom message를 import합니다. ApexNav 워크스페이스 `install/setup.bash`를 source하지 않으면 `ModuleNotFoundError: No module named 'plan_env'`로 실패합니다.
 
 > ⚠️ **순서 주의**: `target_label_publisher.py`(터미널 12)를 **C++ 플래너(터미널 9)보다 먼저** 실행하세요. 플래너가 먼저 뜨면 `/detector/confidence_threshold` 가 없어서 `[Real] No odom || No target confidence threshold` 경고가 반복됩니다. (Step 10 에서도 동일한 순서 적용)
 
@@ -217,6 +264,59 @@ VLM 노드 inverse transform:
 > 브릿지의 `camera_height_habitat` 파라미터와 VLM 노드의 `- 0.88` 역변환이 쌍을 이룹니다.
 > 이 값을 바꾸면 3D 물체 위치 추정이 틀려집니다.
 
+**PointCloud2 frame_id = "World" (대문자)**
+
+`basic_utils/object_point_cloud_utils/object_point_cloud.py` 내 `convert_to_pointcloud2`는
+`pc2.header.frame_id = "World"` 로 고정합니다. IsaacSim 세트업에서 `world`(소문자)는
+articulation root라 로봇과 같이 움직이므로 C++ ApexNav 플래너가 물체 위치를 계속
+로봇 근처로 인식해 즉시 "Reach the object successfully!" 가 발생합니다.
+대문자 `World`(stage root)가 고정 프레임이어야 합니다.
+
+**Point cloud 다운샘플 및 height 필터**
+
+`get_object_point_cloud` 는 다음 세 가지 처리로 cloud 품질을 보장합니다:
+
+1. **Camera-frame depth range filter** — `extract_object_cloud` 에서 `z`(depth) 가
+   `[min_depth, max_depth*0.95]` 밖이면 drop. IsaacSim 의 dense depth는 마스크 외곽이
+   max-range(16.5% 픽셀)로 누수되어 원거리 가짜 점이 생깁니다.
+2. **World-frame height filter** — `transform_points` 적용 후 world z 가
+   `[-0.2, 2.5]m` 밖이면 drop. SAM 마스크가 천장/배경으로 수직 누수되어도 depth 는 정상
+   (~4m) 이라 camera-frame 필터로는 못 걸러짐. Back-project 결과 world z 가 최대 5m 까지
+   튀어올라 C++ 플래너의 `(pt - camera_pos).norm() > depth_filter_maxdist - 0.10` (= 4.89m)
+   필터에 전부 걸리면 `"Have all over depth object cloud!!!!"` 에러로 리젝됨.
+3. **Random subsample** — 최종 `max_points = 2000` 으로 제한. IsaacSim 에서는 단일 물체 cloud 가
+   24,000+ 점을 넘기기도 해서 C++ 플래너 성능을 크게 떨어뜨립니다.
+
+#### 디버그 노트 (2026-04-16)
+
+초기 VLM 통합 테스트에서 C++ 플래너가 즉시 "Reach the object successfully!" 를 출력하고
+로봇이 움직이지 않는 문제가 발생했습니다. 이후 "Have all over depth object cloud!!!!" +
+"After DBSCAN, no point cloud cluster!!" 가 반복됐습니다.
+
+`vlm_diagnostic.py` 로 `/detector/clouds_with_scores` 관측 결과:
+
+- `frame_id = "world"` (소문자) — `world` 는 articulation root 라 로봇과 함께 이동
+- centroid ≈ (+1.25, +0.95, +0.65) — 로봇 기준으로 "바로 앞 1m"
+- `n = 24015` points — 단일 물체로는 과다
+
+원인:
+
+- **frame_id mismatch**: `world` (articulation root) vs C++ 가 기대하는 `World` (stage root)
+- **수직 마스크 leak**: SAM 마스크 최상단 픽셀이 천장 깊이 ~4m 로 back-project →
+  world z ≈ camera_height + 3.9 ≈ 4.78m → `camera_pos (z≈1.08)` 로부터 norm > 4.89m
+  → C++ map_ros 가 전부 over-depth 로 리젝 → DBSCAN 입력 0개 → "no point cloud cluster"
+- **과다 점 수**: 24k 점은 C++ voxel filter/DBSCAN 을 느리게 함
+
+수정 사항 (모두 `object_point_cloud.py` 한 파일, C++ 재빌드 불필요):
+
+- `frame_id = "world"` → `"World"` (stage root, 고정)
+- `extract_object_cloud`: camera-frame depth range filter `[min_depth, max_depth*0.95]`
+- `get_object_point_cloud`: world-frame height filter `z ∈ [-0.2, 2.5]m` (천장/바닥 leak 제거)
+- `get_object_point_cloud`: `max_points = 2000` random subsample
+
+> **참고**: camera_height=0.88m 은 유지 (실제 TF z ≈ 1.08m 과 0.2m 차이는 round-trip 허용 오차).
+> 핵심 문제는 camera_height 값이 아니라 **마스크 수직 leak** 이었음.
+
 ---
 
 ## [5] 전체 실행 순서 (VLM 포함)
@@ -236,10 +336,10 @@ Step 10의 Phase A + C에 Phase B와 VLM 노드를 추가한 전체 순서입니
 
 | 터미널 | 환경 | 서버 | 명령어 |
 |--------|------|------|--------|
-| **5** | `conda activate apexnav_ros2` | YOLOv7 | `cd ~/ApexNav_ROS2_wrapper && python vlm/detector/yolov7.py` |
-| **6** | `conda activate apexnav_ros2` | GroundingDINO | `cd ~/ApexNav_ROS2_wrapper && python vlm/detector/grounding_dino.py` |
-| **7** | `conda activate apexnav_ros2` | BLIP2-ITM | `cd ~/ApexNav_ROS2_wrapper && python vlm/itm/blip2itm.py` |
-| **8** | `conda activate apexnav_ros2` | MobileSAM | `cd ~/ApexNav_ROS2_wrapper && python vlm/segmentor/sam.py` |
+| **5** | `conda activate apexnav_ros2` | YOLOv7 | `cd ~/ApexNav_ROS2_wrapper && python -m vlm.detector.yolov7` |
+| **6** | `conda activate apexnav_ros2` | GroundingDINO | `cd ~/ApexNav_ROS2_wrapper && python -m vlm.detector.grounding_dino` |
+| **7** | `conda activate apexnav_ros2` | BLIP2-ITM | `cd ~/ApexNav_ROS2_wrapper && python -m vlm.itm.blip2itm` |
+| **8** | `conda activate apexnav_ros2` | MobileSAM | `cd ~/ApexNav_ROS2_wrapper && python -m vlm.segmentor.sam` |
 
 ### Phase C — ApexNAV 플래너 + VLM 노드 + Swerve Path Follower
 
