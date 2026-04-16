@@ -12,6 +12,9 @@ docs/
 # OMC state
 .omc/
 
+# understand-anything 지식 그래프 캐시 (기계 생성)
+.understand-anything/
+
 # Python
 __pycache__/
 *.pyc
