@@ -154,11 +154,20 @@ IsaacSim의 토픽을 ApexNAV가 기대하는 `/habitat/*` 형식으로 변환�
 | `/zed_mini/depth` | `/habitat/camera_depth` | 미터 → [0,1] 정규화 |
 
 ```bash
-# 실행
+# 공통: ROS2 환경 준비
 conda deactivate
 source ~/ms_AIworker/scripts/ros2-bridge-env.sh
+
+# (1) 기본 실행 (코드 내 기본값 사용)
 python3 ~/ms_AIworker/scripts/isaacsim_apexnav_bridge.py
+
+# (2) yaml 설정 사용 (권장, Step 10에서 사용하는 방식)
+python3 ~/ms_AIworker/scripts/isaacsim_apexnav_bridge.py \
+    --ros-args --params-file ~/ms_AIworker/config/apexnav_bridge.yaml
 ```
+
+> ⚠️ **2026-04-09 이후: yaml 통합 설정 권장**
+> `config/apexnav_bridge.yaml` 을 `--ros-args --params-file` 로 로드하면, 같은 yaml 을 `algorithm_traj.launch.py` 가 직접 파싱해 C++ 플래너의 `depth_filter_maxdist` 등에 자동 전파합니다. bridge(Python) 와 launch(C++) 가 **single source of truth** 를 공유하므로 수동 일치가 불필요합니다. 수동 일치 방식은 구버전 호환을 위해 유지되지만, 새 설정은 yaml 경유가 안전합니다.
 
 > **위치 소스**: odom FK 적분값이 아닌 **TF lookup(World→base_link)**으로 실제 위치를 가져옵니다.
 > odom (0,0) 시작점과 IsaacSim 실제 위치가 다르기 때문입니다.
@@ -167,9 +176,17 @@ python3 ~/ms_AIworker/scripts/isaacsim_apexnav_bridge.py
 > 카메라 optical frame → base_link 회전: `q=(-0.5, 0.5, -0.5, 0.5)` (틸트 없음, 정면 직시)
 > 카메라 offset (base_link 기준): x=0.066m, z=1.58m
 
-> **파라미터:**
-> - `camera_height_habitat` (기본 0.88m) — VLM 파이프라인(Phase 3)의 Habitat 좌표 round-trip용. 0.88 유지 필요.
-> - `max_depth` (기본 5.0m) — depth 정규화 기준값. C++ 플래너의 `depth_filter_maxdist`와 일치시킵니다.
+> **파라미터** (`config/apexnav_bridge.yaml` — 실제 2필드 구조):
+> ```yaml
+> isaacsim_apexnav_bridge:
+>   ros__parameters:
+>     max_depth: 5.0              # depth 정규화 기준 (meters); launch 가 자동으로 C++ depth_filter_maxdist 에 전파
+>     camera_height_habitat: 0.88 # VLM 파이프라인(Phase 3) Habitat round-trip용 (실제 1.58m 아님)
+> ```
+> - `max_depth` — bridge 는 `depth / max_depth` 로 정규화해서 [0,1] 범위로 보냅니다. yaml 을 사용하면 `algorithm_traj.launch.py` 가 같은 값을 읽어 C++ `depth_filter_maxdist = max_depth - 0.01` 로 전파하므로 수동 일치 불필요합니다.
+> - `camera_height_habitat` — VLM 파이프라인의 Habitat 좌표계 round-trip 용 가상 카메라 높이. 실제 ZED Mini 높이(1.58m) 와 다릅니다. 0.88 유지 필요.
+>
+> 상세 설명은 [Step 10: 설정 파일 설명 — config/apexnav_bridge.yaml](10-apexnav-autonomous.md#6-설정-파일-설명) 을 참고하세요.
 
 ### 4.3 동작 확인
 

@@ -6,13 +6,31 @@
 > 이 가이드의 모든 C++ 수정사항 (KinoAstar swerve 모드, map_ros free_ray 분리, FSM odom_far 임계값 등)은 위 branch에 있습니다.
 > 원본 ApexNAV 코드는 `main` branch에 보존되어 있습니다.
 
+## 이 Step에서 다루는 것
+
+| 섹션 | 내용 |
+|------|------|
+| **[5] 실행** | 터미널별 실행 순서 (Phase A/C), 공통 환경 설정, RViz 확인 |
+| **[6] 설정 파일 설명** | `planning_param_ffw.yaml`, `algorithm_traj.launch.py`, `config/apexnav_bridge.yaml` |
+| **환경 프로파일** | 가정집 / 공장 (factory) 파라미터 비교 |
+| **Swerve 로봇용 패치** | Step 0/0b/1/1b/2/3a/3b/4a/4b/5 — `isaacsim-ffw-swerve` branch에 반영된 수정 내역 |
+| **전체 시스템 데이터 흐름** | 실행 파이프라인, 탐색 루프, 토픽 흐름도, `v_max` 일관성 체크리스트, [파라미터 튜닝 가이드](#파라미터-튜닝-가이드) |
+| **[7] Troubleshooting** | 흔한 증상별 원인/해결 (과거 이슈는 "제거됨 — 역사적 맥락" 박스로 표시) |
+
+> [1] 개요, [2] 사전 요구사항, [3] 빌드, [4] 파일 구조는 이 Step에서는 다루지 않습니다. 각각 Step 8 ([ApexNAV 개요](08-apexnav-overview.md)) 및 Step 9 ([ApexNAV Bridge](09-apexnav-bridge.md))를 참조하세요.
+
+---
+
 ## [5] 실행
 
 ### 5.1 전체 실행 순서
 
 터미널이 많으므로 **단계별로 나누어** 실행합니다. 각 단계가 동작하는지 확인한 후 다음 단계로 넘어가세요.
 
-> **환경 설정 주의**: 터미널마다 필요한 환경이 다릅니다. 아래 표의 "환경" 열을 꼭 확인하세요.
+> 💡 **모든 ROS2 터미널 공통 전제**
+> - 아래 명령어들은 `conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh` 이후 실행하는 것을 전제로 합니다 (터미널마다 매번 필요).
+> - **예외**: 터미널 1 (IsaacSim) 만 `conda activate isaac_sim` 을 사용합니다.
+> - C++ 플래너 계열(터미널 9, 13) 은 추가로 `source ~/ApexNav_ROS2_wrapper/install/setup.bash` 가 필요합니다 (trajectory_manager msg 사용).
 
 **Phase A -- 기본 인프라 (IsaacSim + 로봇 제어)**
 
@@ -48,11 +66,18 @@ conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh && python3 ~
 
 > **확인**: `ros2 topic list | grep habitat` -> `/habitat/odom`, `/habitat/camera_rgb` 등이 보여야 합니다.
 
-**Phase B -- VLM 서버 (터미널 5-8, 10 예약)**
+**Phase B -- VLM 서버 (생략 가능)**
 
 > Phase B는 [Step 11: ApexNAV VLM 통합](11-apexnav-vlm.md)에서 실행합니다. 여기서는 VLM 없이 기하학적 frontier 탐색만 수행합니다.
+>
+> ⚠️ **터미널 번호 규칙**: Phase B 를 생략하면 터미널 **5-8, 10 은 비워두고** Phase C 로 바로 진행합니다 (11, 12, 9, 13 순). 터미널 번호 5-8, 10 은 Step 11 과의 일관성을 위해 예약해 둔 것이며, VLM 없이 돌릴 때는 존재하지 않아도 됩니다.
 
-**Phase C -- ApexNAV 플래너 실행**
+**Phase C -- ApexNAV 플래너 실행** (Step 11의 Phase C와 다름)
+
+> ⚠️ **Phase C 용어 주의**
+> - 이 Step(10)의 **"Phase C"** 는 **C++ 플래너 실행** (터미널 9, 11, 12, 13)을 의미합니다.
+> - Step 11([VLM 통합](11-apexnav-vlm.md))의 **"Phase C"** 는 **VLM 노드 실행**으로 다른 의미입니다.
+> - VLM을 통합할 때는 이 Phase C (C++ 플래너) + Step 11의 Phase C (VLM 노드)를 **둘 다** 실행해야 합니다.
 
 > **순서 주의**: `target_label_publisher.py`를 **먼저** 실행한 후 C++ 플래너를 실행하세요.
 > 플래너가 먼저 뜨면 `/detector/confidence_threshold`가 없어서 `[Real] No odom || No target confidence threshold` 경고가 반복됩니다.
@@ -68,7 +93,7 @@ conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh && python3 ~
 
 **터미널 11 (RViz)**:
 ```bash
-conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh && rviz2 --ros-args -p use_sim_time:=true
+conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh && rviz2 -d ~/ms_AIworker/config/apexnav_rviz.rviz --ros-args -p use_sim_time:=true
 ```
 
 **터미널 12 (물체 명령 — 먼저 실행!)**:
@@ -92,45 +117,40 @@ conda deactivate && source ~/ms_AIworker/scripts/ros2-bridge-env.sh && source ~/
 
 > **VLM 통합** (Phase B + VLM 노드)은 [Step 11: ApexNAV VLM 통합](11-apexnav-vlm.md)에서 다룹니다.
 
-### 5.2 C++ 플래너 실행
+### 5.2 C++ 플래너 로그 확인
+
+터미널 9(C++ 플래너)는 5.1 에서 이미 실행했습니다. 정상 시작되었는지 로그로 확인합니다:
+
+- `[exploration_node]`, `[tsp_solver]` 노드 기동
+- `Starting in REAL WORLD mode` + `Initialization complete` 메시지
+- `traj_server`는 2026-04-07부터 launch에서 비활성화됨 — `swerve_path_follower.py`(터미널 13)가 대체
 
 ```bash
-cd ~/ApexNav_ROS2_wrapper
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-
-ros2 launch exploration_manager exploration_traj.launch.py
+# 로그 파일로 다시 확인 (터미널 9의 2>&1 | tee /tmp/apexnav_run.log 참고)
+tail -n 30 /tmp/apexnav_run.log
 ```
 
-> 정상 시작 시 `[exploration_node]`, `[tsp_solver]` 노드가 올라옵니다.
-> (`traj_server`는 2026-04-07부터 launch에서 비활성화됨 — `swerve_path_follower.py`가 대체)
-> `Starting in REAL WORLD mode` + `Initialization complete` 메시지가 나오면 준비 완료.
+### 5.3 물체 탐색 옵션 상세
 
-### 5.3 물체 탐색 시작
-
-스크립트가 시작되면 **자동으로 360도 회전**하여 초기 SDF 맵을 빌드합니다.
-회전이 완료된 후 `target>` 프롬프트가 나타납니다.
+터미널 12의 `target_label_publisher.py`는 **시작 시 자동 360도 회전**으로 초기 SDF 맵을 빌드하고, 이후 대화형 프롬프트(`target>`)로 탐색 라벨을 받습니다.
 
 > **왜 회전하는가?** real_world 궤적 모드에서는 Habitat의 이산 초기 회전이 없습니다.
 > 정면만 보이는 상태에서 frontier를 찾을 수 없어 `open set empty, no path` 에러가 발생합니다.
 
-```bash
-# 터미널 12에서:
-python3 ~/ms_AIworker/scripts/target_label_publisher.py
-# → 자동 360도 회전 (약 13초)
-# → [Init] Rotation complete (360 degrees). SDF map ready.
+**실행 모드**:
 
-# 대화형 모드:
-target> chair
-# → /detector/label, /move_base_simple/goal 발행
-# → 로봇이 탐색 시작!
+| 모드 | 명령 | 용도 |
+|------|------|------|
+| 대화형 (기본) | `python3 ~/ms_AIworker/scripts/target_label_publisher.py` | 360° 회전 후 `target>` 프롬프트로 라벨 입력 |
+| 직접 지정 | `python3 ~/ms_AIworker/scripts/target_label_publisher.py chair` | 회전 후 `chair` 라벨 자동 발행 |
+| 회전 건너뛰기 | `python3 ~/ms_AIworker/scripts/target_label_publisher.py --no-rotate` | 이미 SDF 맵이 빌드된 상태에서 라벨만 다시 보낼 때 |
 
-# 또는 직접 지정 (회전 후 자동 발행):
-python3 ~/ms_AIworker/scripts/target_label_publisher.py chair
+발행되는 토픽:
+- `/detector/confidence_threshold` (1Hz, 지속) — FSM이 이 토픽이 살아있어야 진행함
+- `/detector/label` — 탐색할 객체 라벨 (string)
+- `/move_base_simple/goal` — FSM 트리거 (TRANSIENT_LOCAL durability)
 
-# 회전 건너뛰기 (이미 맵이 있는 경우):
-python3 ~/ms_AIworker/scripts/target_label_publisher.py --no-rotate
-```
+회전 완료 로그: `[Init] Rotation complete (360 degrees). SDF map ready.`
 
 ### 5.4 RViz에서 확인
 
@@ -183,10 +203,12 @@ IsaacSim은 궤적 모드(`is_real_world=true`)를 사용합니다. FSM 상태:
 | `width` | 0.51 | 로봇 좌우 폭 (m) |
 | `wheel_base` | 0.43 | 축간 거리 (m) |
 | `safe_dist` | 0.45 | 안전 거리 (m) |
-| `max_vel` | 0.5 | 최대 속도 (m/s). 1.0은 trajectory 추적 불안정. MPC 튜닝 후 0.7까지 가능 |
+| `max_vel` | 0.35 | 최대 속도 (m/s). 시뮬 상한 0.3 m/s 대비 catch-up 여유 확보를 위해 0.35. 내부 `max_vel_ = 0.35×0.6 = 0.21 m/s` |
 | `max_acc` | 2.0 | 최대 가속도 (m/s^2) |
 
 > 이 값들은 FFW-SG2의 실제 바퀴 위치(`swerve_controller.py`)에서 계산되었습니다.
+>
+> 📌 **언제 어느 값을 올리고 내리는지**는 [파라미터 튜닝 가이드](#파라미터-튜닝-가이드)와 [v_max 일관성 체크리스트](#v_max-일관성-체크리스트)를 참고하세요.
 
 ### algorithm_traj.launch.py (플래너 파라미터)
 
@@ -214,27 +236,31 @@ IsaacSim은 궤적 모드(`is_real_world=true`)를 사용합니다. FSM 상태:
 
 ### config/apexnav_bridge.yaml (브릿지 설정)
 
-**용도**: bridge 노드와 C++ 플래너가 공유하는 설정 파일입니다. 이전에는 bridge 코드 내에 하드코딩되어 있었으나, yaml로 통합하여 `--ros-args --params-file` 옵션으로 런타임에 로드할 수 있습니다.
+**용도**: bridge 노드와 C++ 플래너가 공유하는 설정 파일입니다. 이전에는 bridge 코드 내에 하드코딩되어 있었으나, yaml로 통합하여 `--ros-args --params-file` 옵션으로 런타임에 로드할 수 있고, launch 파일도 같은 yaml을 직접 파싱해 C++ 플래너에 값을 전파합니다.
 
 ```yaml
-# config/apexnav_bridge.yaml
-bridge:
-  max_depth: 5.0           # depth 정규화 최대값 (m). bridge가 depth_msg / max_depth로 정규화
-  depth_frame_id: "base_link"  # depth 카메라 프레임 ID
-  rgb_frame_id: "base_link"    # RGB 카메라 프레임 ID
-  odom_topic: "/habitat/odom"  # odometry 토픽 (World 좌표)
-  tf_timeout: 2.0          # TF lookup 타임아웃 (초). 초과 시 발행 skip
+# config/apexnav_bridge.yaml (실제 파일 구조)
+isaacsim_apexnav_bridge:        # ROS2 노드명 (rclpy Node name과 일치해야 함)
+  ros__parameters:
+    # depth 정규화 최대 거리 (meters)
+    # - bridge: meters / max_depth → [0, 1] 정규화
+    # - C++ depth_filter_maxdist도 같이 변경해야 함
+    #   (algorithm_traj.launch.py:85, max_depth - 0.01)
+    # 작을수록 가까운 것만 보여서 탐색이 길어짐
+    max_depth: 5.0
+
+    # Habitat 가상 카메라 높이 (VLM pipeline round-trip용, 실제 카메라 높이 아님)
+    camera_height_habitat: 0.88
 ```
 
 **주요 설정값 설명**:
 
 | 설정 | 기본값 | 설명 |
 |------|--------|------|
-| `max_depth` | 5.0 | depth 센서 최대 거리 (m). ZED Mini는 약 5m까지 신뢰 가능. 이 값 초과 depth는 1.0으로 정규화되어 C++에서 max-range로 해석됨 |
-| `depth_frame_id` | base_link | depth 카메라가 바라보는 프레임. TF `base_link → camera_left` 필요 |
-| `rgb_frame_id` | base_link | RGB 카메라 프레임. ZED Mini 기본값 |
-| `odom_topic` | /habitat/odom | Odometry 입력 토픽. nav2_bridge에서 발행하는 World 좌표 odometry |
-| `tf_timeout` | 2.0 | TF lookup이 2초 이상 걸리면 "timeout" 경고 후 skip. IsaacSim은 보통 0.5초 이내 |
+| `max_depth` | 5.0 | depth 센서 최대 거리 (m). ZED Mini는 약 5m까지 신뢰 가능. 이 값 초과 depth는 1.0으로 정규화되어 C++에서 max-range로 해석됨. launch 파일이 이 값을 읽어 `depth_filter_maxdist = max_depth - 0.01`로 C++에 전파 |
+| `camera_height_habitat` | 0.88 | Habitat 가상 카메라 높이 (m). VLM pipeline round-trip용이며 실제 카메라 높이(1.58m)가 아닙니다. `/habitat/sensor_pose` 계산에 사용 |
+
+> 주의: `depth_frame_id`, `rgb_frame_id`, `odom_topic`, `tf_timeout` 같은 필드는 현재 yaml에 없습니다. 해당 값은 bridge 코드 내 상수 또는 ROS2 QoS/TF 기본값을 사용합니다.
 
 **실행 방법**:
 
@@ -247,21 +273,28 @@ python3 ~/ms_AIworker/scripts/isaacsim_apexnav_bridge.py \
 python3 ~/ms_AIworker/scripts/isaacsim_apexnav_bridge.py \
   --ros-args \
   --params-file ~/ms_AIworker/config/apexnav_bridge.yaml \
-  -p bridge.max_depth:=4.5
+  -p max_depth:=4.5
 ```
+
+> `-p` 옵션에는 **파라미터명만** (네임스페이스 없이) 사용합니다. `isaacsim_apexnav_bridge:` / `ros__parameters:`는 yaml 구조이지 CLI 네임스페이스가 아닙니다. `-p bridge.max_depth:=...` 같은 표기는 동작하지 않습니다.
 
 **C++ 플래너와의 연동**:
 
-`algorithm_traj.launch.py`는 다음 값을 yaml에서 읽어 자동 계산합니다:
+`algorithm_traj.launch.py`는 `get_parameter()`가 아니라 **yaml을 직접 파싱**해서 `max_depth`를 읽고, 그 값을 C++ map_ros 파라미터들로 전파합니다:
 
 ```python
-# algorithm_traj.launch.py
-max_depth = get_parameter("bridge.max_depth")  # yaml에서 읽음
-depth_filter_maxdist = max_depth - 0.01       # C++ map_ros에 전달
-free_ray_extrapolation = 0.95                 # 최대 거리의 95%까지 자유 공간 마킹
+# algorithm_traj.launch.py (실제 코드, line 17-22 근처)
+# Read shared max_depth from bridge config (single source of truth)
+import yaml
+with open(bridge_cfg_path) as f:
+    _cfg = yaml.safe_load(f)
+MAX_DEPTH = float(_cfg['isaacsim_apexnav_bridge']['ros__parameters']['max_depth'])
+
+# 이후 C++ 노드 파라미터로 전달 (line 75 근처)
+# 'map_ros/depth_filter_maxdist': MAX_DEPTH - 0.01
 ```
 
-이렇게 하면 bridge와 C++ 플래너가 같은 depth 범위를 사용하여 불일치로 인한 버그를 방지합니다.
+이렇게 하면 bridge(Python)와 C++ 플래너가 **같은 yaml을 single source of truth**로 사용하여, depth 범위 불일치로 인한 버그를 방지합니다. yaml의 `max_depth`만 고치면 양쪽이 자동으로 반영됩니다.
 
 ---
 
@@ -310,9 +343,28 @@ ros2 launch exploration_manager exploration_traj_factory.launch.py
 
 ---
 
-## Swerve 로봇용 패치 (2026-04-07 ~ 2026-04-09)
+## Swerve 로봇용 패치 (2026-04-07 ~ 2026-04-16)
 
-World2 개방 환경에서 자율 주행이 조기에 `No passable frontier` 종료되던 문제를 해결하고, trajectory 추적 안정성을 개선하기 위해 다음 패치를 적용했습니다.
+World2 개방 환경에서 자율 주행이 조기에 `No passable frontier` 종료되던 문제를 해결하고, trajectory 추적 안정성을 개선하기 위해 다음 패치들을 적용했습니다.
+
+> ⚠️ **중요: 아래 모든 Step 은 [`isaacsim-ffw-swerve` branch](https://github.com/romaster93/ApexNav_ROS2_wrapper/tree/isaacsim-ffw-swerve) 에 이미 반영되어 있습니다.** 이 branch 를 체크아웃 + 빌드하면 됩니다. 아래 설명은 **재적용을 위한 절차가 아니라, 변경 내역과 역사적 맥락을 기록한 참고 자료**입니다.
+
+**Step 번호 체계 및 의도 요약**:
+
+| Step | 날짜 | 레이어 | 의도 |
+|------|------|--------|------|
+| **Step 0** | 2026-04-09 | Python (`swerve_path_follower.py`) | feedforward+P, yaw tracking, sim-time 통일 등 path follower 최초 개선 |
+| **Step 0b** | 2026-04-16 | Python + C++ FSM | 거리 기반 closest-point follower 도입 + `exploration_fsm_traj.cpp:599-610` odom-far safety check 블록 제거 |
+| **Step 1** | 2026-04-07 | Python bridge | 카메라 pose NaN 가드 (`isaacsim_apexnav_bridge.py`) |
+| **Step 1b** | 2026-04-09 | Python (`target_label_publisher.py`) | TF 기반 360° 회전, `/detector/confidence_threshold` 지속 발행 |
+| **Step 2** | 2026-04-07 | YAML | `planning_param_ffw.yaml` footprint 실측값 (0.56×0.51) 복원 |
+| **Step 3a** | 2026-04-07 | Launch | `map_ros/filter_min_height` 0.05→0.5 (가짜 바닥 occupancy 방지) |
+| **Step 3b** | 2026-04-07 | Launch | `sdf_map.obstacles_inflation` 0.1→0.45 (footprint 기반 inflation 복원) |
+| **Step 4a** | 2026-04-07 | C++ | `kino_astar.cpp::checkCollision` SDFMap2D enum 방어적 주석 (동작 변경 없음) |
+| **Step 4b** | 2026-04-07 | C++ | `kino_astar.cpp::isCollisionPosYaw` swerve 분기 추가 (holonomic footprint) |
+| **Step 5** | 2026-04-09 | Launch + YAML | `algorithm_traj.launch.py` 파라미터 최적화 (`max_vel=0.35`, `local_bound=10`, etc.) |
+
+의존성: Step 1/1b → Step 0/0b (Python follower가 동작하려면 bridge/label publisher가 먼저), Step 2/3a/3b → Step 4b (map inflation과 footprint collision 설정이 정합되어야 swerve planner가 올바르게 동작), Step 4a/4b/5 는 독립적이지만 cumulative 하게 적용되었습니다.
 
 ### Step 0: swerve_path_follower.py 대폭 개선 (2026-04-09)
 
@@ -346,9 +398,15 @@ final_vel = feedforward_vel + error_vel        # 합산
 - 이전: lookahead pure pursuit만 사용 → trajectory가 가파를 때 추적 지연
 - 이후: feedforward로 속도를 미리 계산 → 부드러운 추적 + 더 빠른 응답
 
-**파라미터** (코드 내):
-- `K_p_vx, K_p_vy`: 위치 피드백 게인 (기본 0.5)
-- `trajectory.differentiate()`: 다항식 7차 미분 (PolyTraj septic)
+**파라미터** (코드 내, `swerve_path_follower.py`):
+- `kp_xy`: 위치 피드백 게인 (단일 스칼라, 기본 2.5; x/y 공통). `self.kp_xy = 2.5` 한 줄로 정의됨
+- `_eval_vel(t_rel)`: piece-wise septic 다항식을 inline으로 미분해 `ff_vel`(feedforward 속도)을 계산하는 메서드. 별도의 `trajectory.differentiate()` 호출은 없음
+
+관련 제어식 (코드 line 294-295 근처):
+```python
+vx = ff_vx + self.kp_xy * vx_b   # ff는 _eval_vel, 오차는 world→body 변환한 vx_b/vy_b
+vy = ff_vy + self.kp_xy * vy_b
+```
 
 #### 0.3 Yaw Tracking (방향 제어)
 
@@ -389,26 +447,31 @@ if new_trajectory_received:
 
 #### 0.5 정지 조건 강화
 
-**정지 판정 (trajectory 끝 도달)**:
-- 조건 1: trajectory 끝 도달 (끝점 0.2m 이내) **AND** 0.5초 동안 명령 미수신
-- 조건 2: 5초 동안 trajectory 명령 미수신 (crash 방어)
+**정지 판정 (trajectory 끝 도달, `_tick()` line 270 근처)**:
+```python
+# swerve_path_follower.py
+if (t_closest > self.traj_duration - 0.05 and age > self.stale_traj_timeout) \
+   or age > 5.0:
+    self._publish_zero()
+    return
+```
+
+- 조건 1: `t_closest`가 trajectory 끝에서 0.05s 이내 **AND** 마지막 traj 수신 후 `stale_traj_timeout`(0.5s) 초과
+- 조건 2: 마지막 traj 수신 후 5.0s 초과 (crash 방어)
 
 **왜 필요한가**?
 - `traj_server` crash 시 무한 대기를 방지
 - `/planning/trajectory` topic이 끊어진 것을 감지
+- trajectory **실행 중**에는 stale check를 발동하지 않음 (`t_closest`가 끝 근처일 때만) → 중간에 로봇이 멈추는 문제 제거
 
-**로그**:
-```
-[swerve_path_follower] Trajectory complete + no command for 0.5s → STOP
-[swerve_path_follower] Command timeout 5s → STOP (crash?)
-```
+**동작**: 위 조건에 걸리면 `_publish_zero()`가 `cmd_vel=0`을 조용히 발행합니다. 별도의 STOP 로그 메시지는 없습니다 (zero-cmd만으로 모터가 정지).
 
 #### 0.6 Sim Time / Wall Time 문제 해결
 
-**변경**: 모든 타임스탬프를 wall clock 기준으로 통일
+**변경**: 모든 타임스탬프를 wall clock 기준으로 통일 (rclpy 기반)
 
 - **이전**: IsaacSim `sim_time` + `/odom` `wall_time` 혼합 → TF lookup 오류
-- **이후**: 항상 `rospy.Time.now()` (wall clock) 사용
+- **이후**: 항상 rclpy의 `self.get_clock().now()` (노드의 wall clock) 사용 — 예: `self.traj_recv_wall = self.get_clock().now()`
 
 **효과**:
 ```
@@ -424,6 +487,40 @@ TF lookup error: "time_source mismatch [1 != 2]" → 해결됨
 | Yaw tracking | depth 카메라 항상 전방 유지 |
 | Trajectory 전환 | 끊김 없음 |
 | 정지 안정성 | crash 감지 성공 |
+
+---
+
+### Step 0b: 거리 기반 Path Follower + safety check 완화 (2026-04-16)
+
+**문제**: 시뮬 속도 한계(0.3 m/s)로 로봇이 trajectory를 못 따라잡으면, trajectory 시간 평가 위치(`traj.getPos(t_elapsed)`)가 앞으로 뻗어나가 실제 odom과 1.5m 이상 벌어짐 → `safetyCallback()`의 odom-far 체크가 `emergencyStop()` → 매번 `replan` → stop-and-go 반복.
+
+**근본 원인**: trajectory를 "시간 함수"로 평가하는 방식 자체가 속도 한계를 가진 로봇과 맞지 않음.
+
+**수정 1: swerve_path_follower.py 거리 기반 평가**
+- 기존: `t_eval = elapsed + lookahead` (wall time 기반)
+- 변경: 매 tick마다 odom 위치에서 trajectory상 가장 가까운 `t_closest`를 찾고 `t_eval = t_closest + lookahead` 사용
+- `_find_closest_t(x, y)` 헬퍼 추가: trajectory 전체를 0.05s 간격으로 numpy 벡터화 샘플링 후 argmin
+- stale 판정도 "시간 초과"가 아닌 "closest point가 끝에 도달"로 변경
+- 효과: 로봇이 느려도 "뒤처짐" 개념이 사라짐. trajectory 끝에 도달해야 자연 종료.
+
+**수정 2: exploration_fsm_traj.cpp 1.5m 체크 제거**
+- `safetyCallback()` 의 `if ((cur_pos - odom).norm() > 1.5)` 블록 주석 처리
+- 시간 기반 예상 위치가 잘못된 emergency stop을 유발하기 때문
+- 충돌 safety는 동일 함수 내 obstacle detection (time-sampled inflated map 체크)이 담당
+
+**수정 3: exploration_fsm_traj.cpp PLAN_TRAJ 분기 — 실제 odom 기반 시작**
+- 기존 else 분기(이전 trajectory 예측 위치에서 시작)를 제거, 항상 실제 odom에서 시작
+- 이유: 예측 위치 누적 오차로 새 trajectory가 실제 로봇과 어긋난 곳에서 시작되는 문제 방지
+
+**재빌드**:
+```bash
+cd ~/ApexNav_ROS2_wrapper && colcon build --packages-select exploration_manager --symlink-install
+```
+
+**검증 방법**:
+- 탐색 중 로그에서 `Odom far from traj ... Stop!!!` 에러가 사라져야 함
+- RViz에서 로봇이 stop-and-go 없이 부드럽게 이동해야 함
+- `grep "Replan:" /tmp/apexnav_run.log` 에 `Odom Far From Trajectory` 출처 전환이 사라져야 함
 
 ---
 
@@ -500,10 +597,11 @@ kino_astar:
 
 ### Step 3a: filter_min_height 복원
 
-**파일**: `algorithm_traj.launch.py:78`
+**파일**: `algorithm_traj.launch.py:88` (`map_ros/filter_min_height` 엔트리)
 
 ```python
-DeclareLaunchArgument('filter_min_height', default_value='0.5',  # 변경: 0.05 → 0.5
+'map_ros/filter_min_height': 0.5,  # 변경: 0.05 → 0.5
+# 2026-04-07 복원: 가짜 바닥 occupancy 방지 (World2 개방 환경)
 ```
 
 - **증상**: 로봇 바닥 점이 OCCUPIED로 잘못 분류
@@ -512,10 +610,11 @@ DeclareLaunchArgument('filter_min_height', default_value='0.5',  # 변경: 0.05 
 
 ### Step 3b: obstacles_inflation 복원
 
-**파일**: `algorithm_traj.launch.py:59`
+**파일**: `algorithm_traj.launch.py:69` (`sdf_map.obstacles_inflation` 엔트리)
 
 ```python
-DeclareLaunchArgument('obstacles_inflation', default_value='0.45',  # 변경: 0.1 → 0.45
+'sdf_map.obstacles_inflation': 0.45,  # 변경: 0.1 → 0.45
+# 2026-04-07 복원: footprint inflation (실측 0.56x0.51 기준). 이전 0.1은 회귀였음
 ```
 
 - **검증**: RViz inflation layer 두께 확인 (footprint + 0.4~0.45m)
@@ -523,11 +622,14 @@ DeclareLaunchArgument('obstacles_inflation', default_value='0.45',  # 변경: 0.
 
 ### Step 4a: checkCollision 방어적 주석
 
-**파일**: `kino_astar.cpp:705-712`
+**파일**: `kino_astar.cpp:779-787` (`KinoAstar::checkCollision` 본체, SDFMap2D enum 주석 포함)
 
 ```cpp
-int state = map_->getOccupancy(pos);
-// SDFMap2D enum: UNKNOWN=0, FREE=1, OCCUPIED=2, out-of-grid=-1
+bool KinoAstar::checkCollision(double x, double y, double z) {
+  // Plan Step 4a: SDFMap2D enum {UNKNOWN=0, FREE=1, OCCUPIED=2}, out-of-grid = -1.
+  int state = map_->getOccupancy(...);
+  if (state == static_cast<int>(SDFMap2D::OCCUPIED)) { ... }
+}
 ```
 
 - 동작 변화 없음 (의도 문서화)
@@ -535,7 +637,7 @@ int state = map_->getOccupancy(pos);
 
 ### Step 4b: isCollisionPosYaw Swerve 모드
 
-**파일**: `kino_astar.cpp:641-710`, `kino_astar.h`, `planning_param_ffw.yaml`
+**파일**: `kino_astar.cpp:670-774` (swerve 분기 683-711, 기존 Ackermann 분기 713-773), `kino_astar.h`, `planning_param_ffw.yaml`
 
 ### 왜 KinoAstar를 수정했는가?
 
@@ -746,9 +848,9 @@ graph TD
 
 | 위치 | 파라미터 | 값 |
 |------|---------|-----|
-| `planning_param_ffw.yaml` | `max_vel` | 0.5 (내부 0.5×0.6 = **0.3**) |
+| `planning_param_ffw.yaml` | `max_vel` | 0.35 (내부 0.35×0.6 = **0.21 m/s**) |
 | `swerve_path_follower.py` | `v_max` | **0.3** |
-| `planning_param_ffw.yaml` | `kino_astar.max_vel`, `optimizer.max_vel` | 모두 0.5 (동일) |
+| `planning_param_ffw.yaml` | `kino_astar.max_vel`, `optimizer.max_vel` | 모두 0.35 (동일) |
 
 ### 파라미터 튜닝 가이드
 
@@ -828,17 +930,18 @@ graph TD
 
 ### /cmd_vel이 0으로만 나옴
 
-- C++ 플래너가 실행 중인지 확인
+- C++ 플래너(`exploration_node`)가 실행 중인지 확인
 - `/habitat/odom`, `/habitat/camera_depth` 토픽이 들어오는지 확인
-- `traj_server` 로그에 에러 없는지 확인
+- `swerve_path_follower.py`가 실행 중이고 `/planning/trajectory`를 받고 있는지 확인 (traj_server는 2026-04-07부터 비활성, swerve follower가 대체)
 
 ### 로봇이 경로를 이탈함 (trajectory 추적 불안정)
 
-- `planning_param_ffw.yaml`의 `max_vel`이 너무 높으면 MPC가 궤적을 추적하지 못합니다
-- 기본값 0.5로 설정되어 있지만, 수정한 적이 있다면 확인하세요:
+- `planning_param_ffw.yaml`의 `max_vel`이 너무 높으면 follower가 궤적을 추적하지 못합니다
+- 기본값 0.35로 설정되어 있지만, 수정한 적이 있다면 확인하세요:
   - `planning_param_ffw.yaml`: root, `kino_astar`, `optimizer` 3곳 모두 동일해야 함
-  - `exploration_traj.launch.py`: `max_correction_vel`도 같은 값이어야 함
-- MPC 튜닝(`control_param.yaml`의 `matrix_q` 속도 가중치)을 올리면 0.7까지 가능
+  - `swerve_path_follower.py`의 `v_max`(0.3)와 정합 — feedforward가 포화되지 않도록 약간 낮게 둠
+
+> ⚠️ `exploration_traj.launch.py`의 `max_correction_vel`은 **2026-04-07 traj_server 비활성화(launch 주석)** 이후 적용되지 않습니다. 실효 속도 상한은 `swerve_path_follower.py`의 `v_max`입니다.
 
 ### RViz에서 Depth 이미지가 깨져 보임
 
@@ -851,18 +954,26 @@ graph TD
 ros2 run rqt_image_view rqt_image_view /habitat/camera_depth
 ```
 
-### 로봇이 2초마다 멈추고 다시 출발함
+### 로봇이 2초마다 멈추고 다시 출발함 (제거됨 — 역사적 맥락)
 
-- `swerve_path_follower.py`의 stale trajectory 타임아웃이 trajectory 실행 중에도 체크되면 발생
-- 현재 코드는 trajectory 끝난 후에만 stale check를 수행하도록 수정됨
-- 여전히 발생하면: `stale_traj_timeout` 값 확인 (기본 0.5초), C++ `replan_time` 확인 (기본 1.0초)
+> ✅ **이 증상은 2026-04-09 수정으로 제거되었습니다.** 현재 `swerve_path_follower.py`는 trajectory 끝(`t_closest > traj_duration - 0.05`) 이후에만 stale check를 수행합니다. 실행 중에는 stale로 인한 정지가 없습니다.
 
-### "Odom far from traj" 에러 후 FINISH
+- 증상(과거): `stale_traj_timeout`이 trajectory 실행 중에도 체크되어 로봇이 주기적으로 멈췄음
+- 여전히 재현되면 확인: `stale_traj_timeout`(기본 0.5s), C++ `replan_time`(기본 1.0s), `swerve_path_follower.py`가 최신 버전인지
 
-- 로봇이 trajectory에서 1.5m 이상 벗어나면 긴급 정지 → replan → frontier 못 찾으면 FINISH
-- 원인: path follower의 P 제어만으로는 trajectory 추적이 부정확
-- 해결: feedforward 속도 추가로 개선됨 (2026-04-09). 여전히 발생하면 `kp_xy` 올리기 (1.5 → 2.0)
-- C++ 임계값: `exploration_fsm_traj.cpp`에서 `norm() > 1.5` (원래 0.6, 완화됨)
+### "Odom far from traj" 에러 후 FINISH (제거됨 — 역사적 맥락)
+
+> ✅ **이 증상은 2026-04-16 Step 0b로 제거되었습니다.** `exploration_fsm_traj.cpp:599-610`의 time-based odom-far safety check는 주석 처리되었습니다. 거리 기반 follower에서는 시간 기반 예상 위치(`cur_pos`)가 실제 로봇을 앞서 나가 1.5m 조건이 거짓 양성으로 발동했기 때문입니다. 충돌 안전은 바로 아래의 **time-sampled obstacle detection**(line 612 이하)이 별도로 담당합니다.
+
+- 증상(과거): 로봇이 시뮬 속도 상한(0.3 m/s)으로 느리게 따라가는 동안 trajectory의 시간 기반 예상 위치가 앞으로 뻗어나가 `norm() > 1.5` → `emergencyStop()` → `PLAN_TRAJ` → frontier 못 찾으면 FINISH
+- 해결 타임라인: 2026-04-09 feedforward + kp_xy 튜닝 → 완화만 됨 / 2026-04-16 C++ safety check 블록 자체 제거 → 완전 해결
+- `norm() > 1.5` (이전 0.6 → 완화 1.5 → 제거) 값은 더 이상 적용되지 않음
+
+### 로봇이 trajectory를 크게 벗어남 (현재도 발생 가능)
+
+- path follower의 P 제어만으로는 급한 곡률에서 추적 지연이 남음
+- 완화: `swerve_path_follower.py`의 `kp_xy` 올리기(2.5 → 3.0), `v_max` 낮추기(0.3 → 0.25)
+- 주의: 더 이상 C++의 odom-far safety가 강제 정지시키지 않으므로, 심하게 이탈하면 collision 위험이 있음 → time-sampled obstacle check가 커버하는지 RViz로 확인
 
 ### 초기 회전이 두 바퀴 돌아감
 

@@ -40,8 +40,8 @@ class SwervePathFollower(Node):
         super().__init__('swerve_path_follower')
 
         # === Tunable parameters ===
-        self.kp_xy = 1.5         # proportional gain on world-frame position error
-        self.v_max = 0.3         # max linear speed (m/s) — must match planner max_vel
+        self.kp_xy = 2.5         # proportional gain on world-frame position error
+        self.v_max = 0.3         # max linear speed (m/s) — sim limit
         self.lookahead = 0.25    # seconds ahead in trajectory to chase
         self.tick_hz = 50.0      # control loop rate
         self.tail_decay = 0.85   # multiplicative decay applied each tick after end
@@ -169,6 +169,61 @@ class SwervePathFollower(Node):
             tn *= local_t
         return (x, y)
 
+    def _find_closest_t(self, x: float, y: float) -> float:
+        """Find trajectory time t in [0, traj_duration] whose (x,y) is closest to (x,y).
+
+        Vectorized sampling over every piece using Horner's method. Sample spacing
+        is 0.05 s (min 20 samples total). Returns clamped t.
+        """
+        traj = self.traj
+        if traj is None or self.traj_duration <= 0.0:
+            return 0.0
+
+        total = self.traj_duration
+        n_samples = max(int(total / 0.05), 20)
+        order = traj['order']
+        cumulative_t = traj['cumulative_t']
+        durations = traj['durations']
+        n_pieces = traj['n']
+
+        # Build per-piece sample counts proportional to duration.
+        counts = np.maximum(
+            np.round(durations / total * n_samples).astype(int), 2
+        )
+
+        xs_list = []
+        ys_list = []
+        ts_list = []
+        for idx in range(n_pieces):
+            k = int(counts[idx])
+            dur = durations[idx]
+            local_ts = np.linspace(0.0, dur, k, endpoint=(idx == n_pieces - 1))
+            cx = traj['coef_x'][idx]
+            cy = traj['coef_y'][idx]
+            # Horner mirroring getPos: tn=1; for i=order..0: pos += tn*coef[i]; tn*=t
+            x_vals = np.zeros_like(local_ts)
+            y_vals = np.zeros_like(local_ts)
+            tn = np.ones_like(local_ts)
+            for i in range(order, -1, -1):
+                x_vals += tn * cx[i]
+                y_vals += tn * cy[i]
+                tn *= local_ts
+            xs_list.append(x_vals)
+            ys_list.append(y_vals)
+            ts_list.append(local_ts + cumulative_t[idx])
+
+        xs = np.concatenate(xs_list)
+        ys = np.concatenate(ys_list)
+        ts = np.concatenate(ts_list)
+        d2 = (xs - x) ** 2 + (ys - y) ** 2
+        best = int(np.argmin(d2))
+        t_closest = float(ts[best])
+        if t_closest < 0.0:
+            t_closest = 0.0
+        if t_closest > total:
+            t_closest = total
+        return t_closest
+
     def _eval_vel(self, t_rel: float):
         """Evaluate velocity (dx, dy) by differentiating the septic poly at t_rel."""
         traj = self.traj
@@ -204,12 +259,15 @@ class SwervePathFollower(Node):
 
             now = self.get_clock().now()
 
-            elapsed = (now - self.traj_start_time).nanoseconds * 1e-9
-            t_eval = min(elapsed + self.lookahead, self.traj_duration)
+            # 거리 기반 평가: odom 위치에서 가장 가까운 trajectory 점을 찾아
+            # 그 지점 + lookahead를 target으로. 시뮬 속도 한계로 뒤처져도
+            # 항상 현재 위치 기준으로 전진 목표를 재조정.
+            t_closest = self._find_closest_t(self.odom_x, self.odom_y)
+            t_eval = min(t_closest + self.lookahead, self.traj_duration)
 
-            # 플래너 정지 감지 (FINISH/crash)
+            # 플래너 정지 감지 (FINISH/crash) — trajectory 끝에 도달했을 때만
             age = (now - self.traj_recv_wall).nanoseconds * 1e-9
-            if (elapsed > self.traj_duration and age > self.stale_traj_timeout) \
+            if (t_closest > self.traj_duration - 0.05 and age > self.stale_traj_timeout) \
                     or age > 5.0:
                 self.last_cmd = (0.0, 0.0, 0.0)
                 vx = vy = omega = 0.0
@@ -218,8 +276,8 @@ class SwervePathFollower(Node):
                 if target is None:
                     return
 
-                # Feedforward velocity from trajectory derivative
-                ff_vel = self._eval_vel(min(elapsed, self.traj_duration))
+                # Feedforward velocity from trajectory derivative at t_eval
+                ff_vel = self._eval_vel(t_eval)
                 cy = math.cos(self.odom_yaw)
                 sy = math.sin(self.odom_yaw)
                 # World → base frame

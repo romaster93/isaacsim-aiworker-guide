@@ -143,8 +143,12 @@ Phase A (Step 10의 기본 인프라)와 Phase B (VLM 서버 4개)가 모두 실
 | **10** | `conda activate apexnav_ros2` | VLM 노드 | `python3 ~/ms_AIworker/scripts/isaacsim_realworld_node.py` |
 | **12** | `conda deactivate` + `source ros2-bridge-env.sh` | 물체 명령 (이미 실행 중) | `python3 ~/ms_AIworker/scripts/target_label_publisher.py` |
 
+> ⚠️ **순서 주의**: `target_label_publisher.py`(터미널 12)를 **C++ 플래너(터미널 9)보다 먼저** 실행하세요. 플래너가 먼저 뜨면 `/detector/confidence_threshold` 가 없어서 `[Real] No odom || No target confidence threshold` 경고가 반복됩니다. (Step 10 에서도 동일한 순서 적용)
+
 > **터미널 12 참고**: `target_label_publisher.py`는 Step 10에서도 사용합니다.
 > VLM 없이 탐색할 때도 이 스크립트가 필요합니다.
+
+> **로봇을 움직이려면**: Step 10의 `swerve_path_follower.py` (터미널 13)도 함께 실행해야 합니다. `traj_server` 가 비활성화된 상태이므로 이 노드가 없으면 `/cmd_vel` 이 발행되지 않습니다. 전체 실행 순서는 아래 [[5] 전체 실행 순서](#5-전체-실행-순서-vlm-포함) 를 참고하세요.
 
 ### 4.2 VLM 노드 동작 원리
 
@@ -226,7 +230,7 @@ Step 10의 Phase A + C에 Phase B와 VLM 노드를 추가한 전체 순서입니
 | **1** | `conda activate isaac_sim` | IsaacSim | `isaacsim` → Play |
 | **2** | `conda deactivate` + `source ros2-bridge-env.sh` | Swerve Controller | `python3 ~/ms_AIworker/scripts/swerve_controller.py` |
 | **3** | `conda deactivate` + `source ros2-bridge-env.sh` | Nav2 Bridge (TF) | `python3 ~/ms_AIworker/scripts/nav2_bridge.py` |
-| **4** | `conda deactivate` + `source ros2-bridge-env.sh` | ApexNAV Bridge | `python3 ~/ms_AIworker/scripts/isaacsim_apexnav_bridge.py` |
+| **4** | `conda deactivate` + `source ros2-bridge-env.sh` | ApexNAV Bridge | `python3 ~/ms_AIworker/scripts/isaacsim_apexnav_bridge.py --ros-args --params-file ~/ms_AIworker/config/apexnav_bridge.yaml` |
 
 ### Phase B — VLM 서버 (이 가이드 신규)
 
@@ -237,16 +241,23 @@ Step 10의 Phase A + C에 Phase B와 VLM 노드를 추가한 전체 순서입니
 | **7** | `conda activate apexnav_ros2` | BLIP2-ITM | `cd ~/ApexNav_ROS2_wrapper && python vlm/itm/blip2itm.py` |
 | **8** | `conda activate apexnav_ros2` | MobileSAM | `cd ~/ApexNav_ROS2_wrapper && python vlm/segmentor/sam.py` |
 
-### Phase C — ApexNAV 플래너 + VLM 노드
+### Phase C — ApexNAV 플래너 + VLM 노드 + Swerve Path Follower
 
-> **실행 순서**: 터미널 12(물체 명령) → 터미널 10(VLM 노드) → 터미널 9(C++ 플래너) 순서를 권장합니다.
+> ⚠️ **Phase C 용어 주의**: 이 Step(11)의 **"Phase C"** 는 **VLM 노드가 포함된 플래너 실행**을 의미합니다. Step 10([자율 주행](10-apexnav-autonomous.md))의 **"Phase C"** 는 **VLM 없는 C++ 플래너 실행**으로 다른 의미입니다. VLM 통합 시에는 Step 10 Phase C 의 터미널들 + 이 Phase C 의 VLM 노드(터미널 10)를 **모두** 실행합니다.
+
+> **실행 순서**: 터미널 12(물체 명령) → 터미널 10(VLM 노드) → 터미널 9(C++ 플래너) → 터미널 13(Swerve Path Follower) 순서를 권장합니다.
+
+> ⚠️ **순서 주의** — `target_label_publisher.py`를 **C++ 플래너보다 먼저** 실행하세요. 플래너가 먼저 뜨면 `/detector/confidence_threshold` 누락으로 `[Real] No odom || No target confidence threshold` 경고가 반복됩니다. (Step 10 에서도 동일한 순서 적용)
 
 | 터미널 | 환경 | 내용 | 명령어 |
 |--------|------|------|--------|
-| **11** | `conda deactivate` + `source ros2-bridge-env.sh` | RViz | `rviz2 --ros-args -p use_sim_time:=true` |
+| **11** | `conda deactivate` + `source ros2-bridge-env.sh` | RViz | `rviz2 -d ~/ms_AIworker/config/apexnav_rviz.rviz --ros-args -p use_sim_time:=true` |
 | **12** | `conda deactivate` + `source ros2-bridge-env.sh` | 물체 명령 (먼저!) | `python3 ~/ms_AIworker/scripts/target_label_publisher.py` |
 | **10** | `conda activate apexnav_ros2` | VLM 노드 | `python3 ~/ms_AIworker/scripts/isaacsim_realworld_node.py` |
 | **9** | `conda deactivate` + `source ros2-bridge-env.sh` + `source ~/ApexNav_ROS2_wrapper/install/setup.bash` | C++ 플래너 | `ros2 launch exploration_manager exploration_traj.launch.py` |
+| **13** | `conda deactivate` + `source ros2-bridge-env.sh` + `source ~/ApexNav_ROS2_wrapper/install/setup.bash` | Swerve Path Follower (`traj_server` 대체) | `python3 ~/ms_AIworker/scripts/swerve_path_follower.py` |
+
+> **터미널 13 (Swerve Path Follower)**: ApexNAV 기본 `traj_server`는 unicycle MPC라 FFW-SG2 swerve 의 vy 를 활용하지 못합니다. 2026-04-07부터 `exploration_traj.launch.py` 에서 `traj_server` 가 비활성화되어 있으므로, 이 노드가 `/planning/trajectory` 를 받아 holonomic `/cmd_vel` 을 발행합니다. **이 노드가 없으면 로봇이 움직이지 않습니다.** 상세는 [Step 10 터미널 13](10-apexnav-autonomous.md#5-실행) 참고.
 
 > **터미널 10 (VLM 노드)**: Hydra config를 `real_world_test_example/config/isaacsim_realworld.yaml`에서 읽습니다.
 > 실행 디렉토리는 어디서든 상관없습니다 (절대 경로로 config를 찾습니다).
@@ -273,7 +284,7 @@ python3 ~/ms_AIworker/scripts/target_label_publisher.py "sofa"
 
 ## [6] 설정 파일 (isaacsim_realworld.yaml)
 
-`/home/cho/ApexNav_ROS2_wrapper/real_world_test_example/config/isaacsim_realworld.yaml`
+`~/ApexNav_ROS2_wrapper/real_world_test_example/config/isaacsim_realworld.yaml`
 
 ### detector 섹션
 
