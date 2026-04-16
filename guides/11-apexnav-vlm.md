@@ -443,6 +443,30 @@ ros2 run rqt_image_view rqt_image_view /detector/detect_img
 
 ## [8] Troubleshooting
 
+### 먼저 진단 도구 실행
+
+문제가 발생하면 `scripts/vlm_diagnostic.py`를 먼저 돌려 전체 파이프라인 상태를 한 번에 확인합니다.
+
+```bash
+conda deactivate
+source ~/ms_AIworker/scripts/ros2-bridge-env.sh
+source ~/ApexNav_ROS2_wrapper/install/setup.bash
+python3 ~/ms_AIworker/scripts/vlm_diagnostic.py
+```
+
+출력 지표:
+
+| 지표 | 정상 범위 | 비정상 시 의심 |
+|------|----------|----------------|
+| rgb/depth/sensor_pose Hz | 25~30 | 브릿지/IsaacSim 정지 |
+| detect_img/itm/cloud Hz | 6~8 | VLM 서버 freeze 또는 sync 실패 |
+| sync(ms) rgb-pose | <50ms | 타임스탬프 정렬 실패 |
+| cloud centroid | 로봇 이동과 **무관**하게 고정 | 좌표 프레임 버그 (frame_id 확인) |
+| cloud frame_id | `"World"` (대문자) | 과거 "world" 버그 재발 — §4.3 참조 |
+| cloud n | <2000 | 다운샘플/필터링 미동작 |
+
+30초~60초 수집 후 Ctrl+C. 이 진단 결과를 가지고 아래 항목으로 좁혀갑니다.
+
 ### VLM 서버 연결 실패
 
 각 서버가 해당 포트에서 실행 중인지 확인합니다:
