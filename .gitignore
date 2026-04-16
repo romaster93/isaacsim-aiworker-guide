@@ -16,5 +16,13 @@ docs/
 __pycache__/
 *.pyc
 
+# Hydra outputs / lockfiles (VLM 노드 실행 아티팩트)
+scripts/lockfiles/
+scripts/outputs/
+
+# Editor swap / backup
+*.swp
+*.current
+
 # OS
 .DS_Store
