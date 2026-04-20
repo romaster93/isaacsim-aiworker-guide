@@ -145,7 +145,7 @@ class IsaacSimRealWorldNode(Node):
         llm_cfg = self.config.llm
         self.llm_answer_path = llm_cfg.llm_answer_path
         self.llm_response_path = llm_cfg.llm_response_path
-        self.llm_client = llm_cfg.llm_client.llm_client
+        self.llm_client = llm_cfg.llm_client
 
         # Label / LLM state
         self.label = None
