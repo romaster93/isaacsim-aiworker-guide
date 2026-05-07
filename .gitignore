@@ -4,6 +4,16 @@ isaacsim_ai_worker/usd_ai_worker/meshes/
 isaacsim_ai_worker/usd_ai_worker/usd_ai_worker.usd
 isaacsim_ai_worker/usd_ai_worker/ffw_sg2_follower.urdf
 isaacsim_ai_worker/usd_env/
+
+# 외부 데이터셋 (KIMM, KNU 등)
+isaacsim_ai_worker/usd_ai_worker/isaacsim_ai_worker_kimm/
+isaacsim_ai_worker/usd_ai_worker/ms_isaacsim_knu/
+
+# 실험 산출물 (rosbag2 mcap, screenshot, npz, csv — 대용량/이진)
+rosbags/
+screenshots/
+results/
+
 # 백업 zip
 *.zip
 # docs
