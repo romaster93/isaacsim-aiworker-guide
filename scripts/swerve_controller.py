@@ -68,7 +68,7 @@ class SwerveController(Node):
         self.vy = 0.0
         self.omega = 0.0
         self.last_cmd_time = self.get_clock().now()
-        self.cmd_timeout = 0.5
+        self.cmd_timeout = 0.2
 
         # === FK: joint_states → odometry ===
         sensor_qos = QoSProfile(
