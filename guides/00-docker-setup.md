@@ -217,6 +217,8 @@ chmod +x scripts/docker-run.sh
 ./runapp.sh
 ```
 
+> 💡 **MCP extension과 함께 실행하려면**: `./runapp.sh --ext-folder /isaac-sim/mcp-ext --enable isaac.sim.mcp_extension` (자세한 내용은 아래 [7-A] 참조)
+
 실행 스크립트 모드:
 | 명령어 | 설명 |
 |--------|------|
@@ -318,6 +320,75 @@ ros2 topic echo /tf --once
 
 ---
 
+## [7-A] MCP Extension 활성화 (선택)
+
+[isaac-sim-mcp](https://github.com/omni-mcp/isaac-sim-mcp) 를 통해 Claude / Cursor 같은 AI 어시스턴트가 IsaacSim을 자연어로 제어할 수 있습니다.
+
+### 구조
+
+```
+호스트                              컨테이너
+─────────────────────────────────   ─────────────────────────────────
+MCP server (Claude/Cursor 연결용)   IsaacSim + MCP extension
+uv run isaac_mcp/server.py    ───►  localhost:8766 (listen)
+                            (TCP, network_mode: host 로 직통)
+```
+
+- 호스트 MCP server: `~/Documents/isaac-sim-mcp/isaac_mcp/server.py` (uv로 실행)
+- IsaacSim extension: `~/Documents/isaac-sim-mcp/isaac.sim.mcp_extension/` (컨테이너에 마운트해서 로드)
+
+### 사전 셋업
+
+`docker-compose.yml`의 `volumes`에 ext 폴더 마운트가 들어가 있어야 합니다 (이미 추가됨):
+
+```yaml
+volumes:
+  - /home/cho/Documents/isaac-sim-mcp:/isaac-sim/mcp-ext:ro
+```
+
+### 실행
+
+컨테이너 안에서 IsaacSim 띄울 때 ext 옵션 추가:
+
+```bash
+./runapp.sh --ext-folder /isaac-sim/mcp-ext --enable isaac.sim.mcp_extension
+```
+
+### 확인
+
+호스트 별도 터미널에서:
+
+```bash
+ss -tnlp | grep 8766
+```
+→ LISTEN 잡히면 extension 정상 로드.
+
+또는 컨테이너 로그:
+```bash
+docker logs isaac-sim 2>&1 | grep -i "mcp\|8766"
+# Isaac Sim MCP server started on localhost:8766
+```
+
+### 옵션 환경변수 (3D 생성 기능 사용 시만)
+
+기본 control은 환경변수 없이 동작. 3D 모델 생성 (Beaver3D, NVIDIA API) 쓸 때만:
+
+```bash
+export BEAVER3D_MODEL=<beaver3d model name>
+export ARK_API_KEY=<ARK API key>
+export NVIDIA_API_KEY=<NGC API key>
+```
+
+### Troubleshooting
+
+| 증상 | 원인 / 해결 |
+|------|-------------|
+| `8766` 포트 안 잡힘 | runapp.sh에 `--enable` 옵션 빠짐. 컨테이너 로그에서 `[ext: isaac.sim.mcp_extension*]` 라인 확인 |
+| Extension load 실패 | 컨테이너 안에 `ls /isaac-sim/mcp-ext/isaac.sim.mcp_extension/` 했을 때 `config/extension.toml`이 보여야 함. 안 보이면 volume 마운트 실패 |
+| Claude/Cursor에서 연결 안 됨 | 호스트 MCP server (`isaac_mcp/server.py`)가 떠 있는지 확인. `ps -ef \| grep isaac_mcp` |
+
+---
+
 ## [8] 실행 모드 비교
 
 | 모드 | 명령어 | GUI | 용도 | 접속 방법 |
@@ -366,6 +437,7 @@ services:
 | `isaac-logs` | IsaacSim 로그 파일 |
 | `isaac-config` | Omniverse 설정 |
 | `./isaacsim_ai_worker` | **프로젝트 USD 파일** (호스트 ↔ 컨테이너 실시간 공유) |
+| `~/Documents/isaac-sim-mcp` → `/isaac-sim/mcp-ext` | MCP extension (선택, [7-A] 참조) |
 
 ---
 

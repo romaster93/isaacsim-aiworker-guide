@@ -5,9 +5,10 @@ services:
     container_name: isaac-sim
     stdin_open: true
     tty: true
+    entrypoint: ["sleep", "infinity"]
     network_mode: host
     ipc: host                    # MIT-SHM X11 프리징 방지
-    shm_size: '2gb'              # GPU 공유 메모리 부족 방지 (기본 64MB → 2GB)
+    shm_size: '64gb'             # GPU 공유 메모리 부족 방지 (기본 64MB → 64GB)
     deploy:
       resources:
         reservations:
@@ -20,6 +21,9 @@ services:
       - PRIVACY_CONSENT=Y
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1        # Qt MIT-SHM 비활성화 (Docker GUI 안정성)
+      - NVIDIA_DRIVER_CAPABILITIES=all  # graphics+compute+utility+display 모두 필요 (RTX 렌더)
+      - NVIDIA_VISIBLE_DEVICES=all
+      - XAUTHORITY=/tmp/.docker.xauth
     volumes:
       # IsaacSim 캐시 (성능 향상 - 재시작 시 로딩 빨라짐)
       - isaac-cache:/isaac-sim/.cache:rw
@@ -31,9 +35,13 @@ services:
       - isaac-pkg:/isaac-sim/.local/share/ov/pkg:rw
       # 프로젝트 USD 파일 마운트 (호스트 ↔ 컨테이너 공유)
       - ./isaacsim_ai_worker:/isaac-sim/workspace:rw
-      # GUI 모드용 X11
+      # Screenshot 저장 경로 (F10 / File → Capture Screenshot 결과물을 호스트에서 바로 확인)
+      - ./screenshots:/isaac-sim/.local/share/ov/data/documents/Kit/shared/screenshots:rw
+      # Isaac Sim MCP extension (호스트의 ~/Documents/isaac-sim-mcp 마운트)
+      - /home/cho/Documents/isaac-sim-mcp:/isaac-sim/mcp-ext:ro
+      # GUI 모드용 X11 (Wayland/Xwayland 환경 호환)
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - ${HOME}/.Xauthority:/root/.Xauthority:ro
+      - /tmp/.docker.xauth:/tmp/.docker.xauth:ro
 
 volumes:
   isaac-cache:
