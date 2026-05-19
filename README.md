@@ -2,6 +2,8 @@
 
 NVIDIA IsaacSim 5.1.0 + ROS2 Jazzy 환경에서 **ROBOTIS FFW-SG2 Swerve 로봇**을 시뮬레이션하고, **ApexNAV** 기반 자율 탐색을 구현하는 단계별 가이드입니다.
 
+> **시뮬레이션 단계(Step 00~13)는 완료 상태**입니다. Step 14부터는 같은 파이프라인을 **실하드웨어**(자체 제작 diff drive AMR + Jetson Orin + RealSense D435i + 원격 Workstation) 위에서 동작시키는 가이드 시리즈가 진행됩니다.
+
 ## 로봇 사양
 
 | 항목 | 내용 |
@@ -38,8 +40,10 @@ NVIDIA IsaacSim 5.1.0 + ROS2 Jazzy 환경에서 **ROBOTIS FFW-SG2 Swerve 로봇*
 | 08 | [08-apexnav-overview.md](guides/08-apexnav-overview.md) | ApexNAV 개요 (Semantic Frontier Exploration) | 완료 |
 | 09 | [09-apexnav-bridge.md](guides/09-apexnav-bridge.md) | IsaacSim ↔ ApexNAV 토픽 브릿지 구성 | 완료 |
 | 10 | [10-apexnav-autonomous.md](guides/10-apexnav-autonomous.md) | ApexNAV 자율 탐색 실행 (Phase 2) | 완료 |
-| 11 | [11-apexnav-vlm.md](guides/11-apexnav-vlm.md) | VLM 기반 물체 탐색 (Phase 3) | 기본 동작 확인 (2026-04-16) |
+| 11 | [11-apexnav-vlm.md](guides/11-apexnav-vlm.md) | VLM 기반 물체 탐색 (Phase 3) | 동작 확인 완료 (2026-05-08) |
 | 12 | [12-interioragent-dataset.md](guides/12-interioragent-dataset.md) | InteriorAgent 실내 씬 데이터셋 활용 | 완료 |
+| 13 | [13-ackermann-baseline.md](guides/13-ackermann-baseline.md) | Ackermann 알고리즘 baseline (논문 비교군) | 완료 |
+| 14 | [14-realhw-network.md](guides/14-realhw-network.md) | **실하드웨어** 네트워크 토폴로지 + 무선 전송 설계 | 설계 문서 |
 
 ## 빠른 시작
 
@@ -152,7 +156,8 @@ ms_AIworker/
 ├── Dockerfile                      # IsaacSim + ROS2 Jazzy CLI 커스텀 이미지
 ├── docker-compose.yml              # 컨테이너 실행 설정
 ├── fastdds.xml                     # FastDDS UDP 설정
-├── guides/                         # 단계별 가이드 (00~12)
+├── guides/                         # 단계별 가이드 (00~14)
+│   └── archive/                    # 보류·폐기된 가이드 보관
 ├── config/
 │   ├── apexnav_bridge.yaml         # ApexNAV 브릿지 depth 파라미터
 │   ├── nav2_params.yaml            # Nav2 설정
@@ -172,13 +177,14 @@ ms_AIworker/
             └── World2.usd
 ```
 
-## 현재 개발 상태 (2026-04-16 기준)
+## 현재 개발 상태 (2026-05-19 기준)
 
 | 단계 | 내용 | 상태 |
 |------|------|------|
-| Phase 1 | IsaacSim 환경 구성 (URDF, 센서, TF, 제어) | 완료 |
-| Phase 2 | ApexNAV 자율 탐색 (SDF 맵 생성 + Frontier 탐색) | 완료 |
-| Phase 3 | VLM 기반 물체 탐색 (target_label → 시맨틱 탐색) | 기본 동작 확인 (2026-04-16, mask leak 수정) |
+| Phase 1 (시뮬) | IsaacSim 환경 구성 (URDF, 센서, TF, 제어) | 완료 |
+| Phase 2 (시뮬) | ApexNAV 자율 탐색 (SDF 맵 생성 + Frontier 탐색) | 완료 |
+| Phase 3 (시뮬) | VLM 기반 물체 탐색 (target_label → 시맨틱 탐색) | 완료 (2026-05-08, RViz 시각화 + 단일 물체 탐색 동작 확인) |
+| Phase 4 (실기) | 실하드웨어 전환 — 자체 제작 diff drive + RealSense D435i + Jetson Orin + 원격 Workstation | **진행 중** — Step 14 설계 문서 완료, Step 15 이후는 D435i 접근 가능 시점에 진행 |
 
 ## 주요 설계 사항
 
@@ -193,3 +199,4 @@ ms_AIworker/
 - IsaacSim 5.1.0은 5.0.0과 UI가 다름 (`New from Stage Template`, `Graph Editors > Action Graph`, `Collect and Save As` 등)
 - ApexNAV는 밀폐 실내 환경 전제 설계 — 개방 환경에서는 C++ 파라미터 튜닝 필요
 - 가이드에서 발견한 문제나 차이점은 즉시 해당 md 파일에 반영
+- **Step 14부터 실하드웨어 전환**: Workstation에서 ApexNAV/VLM 실행, Wi-Fi 구간만 GStreamer H.265 NVENC + 커스텀 UDP zstd로 DDS 회피. 시뮬 자산(ApexNAV C++ wrapper, VLM 노드)은 Workstation 내부에서 그대로 재사용.
