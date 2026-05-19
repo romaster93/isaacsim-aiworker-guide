@@ -576,10 +576,10 @@ VLM object-goal navigation 테스트를 위해 [InteriorAgent](https://huggingfa
 
 ---
 
-**Status**: Phase 3 미테스트 — 코드 구조 완성, 실제 실행 확인 필요
+**Status**: Phase 3 동작 확인 완료 (2026-05-08)
 - Phase 1: 센서 + 브릿지 연결 (depth, rgb, odom → /habitat/* 토픽) — 완료
 - Phase 2: ApexNAV C++ 플래너 (SDF 맵, frontier 탐색, 자율 이동) — 완료
-- Phase 3: VLM 통합 (물체 인식 + 의미론적 탐색) — 미테스트
+- Phase 3: VLM 통합 (물체 인식 + 의미론적 탐색) — 완료 (frame_id "World" 수정 + 마스크 leak fix 반영, 단일 물체 탐색 동작 확인)
 
 ---
 
